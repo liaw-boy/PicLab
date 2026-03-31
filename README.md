@@ -1,90 +1,86 @@
-# FigmaFlow
+# PicLab
 
-Interactive CLI to configure Figma MCP server for every major coding agent.
+桌面版照片後製工具 — 為照片加上白邊、疊加 EXIF 相機資訊，未來將整合 RAW 調色功能。
 
-一鍵設定 Figma MCP 到所有主流 Coding Agent 的互動式 CLI 工具。
+---
 
-```
-npx figmaflow
-```
+## 功能特色
 
-## What it does / 功能簡介
+- **三種版型**
+  - `CLASSIC` — 白邊 + 底部 EXIF 條（品牌 Logo、機身、鏡頭、拍攝參數、日期）
+  - `ROUNDED` — 等比白邊 + 圓角照片
+  - `SPLIT` — 左側資訊欄（35%）+ 右側照片（65%），可拖曳調整照片顯示區段
 
-FigmaFlow walks you through an interactive setup to connect Figma's MCP server to your coding agent. It generates the correct config file — in the right format, at the right path, with the right key names — so you don't have to look up the differences between 14 agents.
+- **Instagram 最佳化輸出比例**
+  - 1:1、4:5、3:4、2:3、9:16、1.91:1、16:9、5:4、自由尺寸
 
-FigmaFlow 透過互動式問答，幫你產生正確的 Figma MCP 設定檔。不同 agent 的格式 (JSON/TOML/YAML)、檔案路徑、key 名稱全部自動處理，不用再查文件。
+- **品牌 Logo 支援**
+  - Sony、Canon、Nikon、Fujifilm、Leica、Panasonic、OM System、Ricoh、Pentax 等
+  - 支援自訂 Logo PNG
 
-## Features / 特色
+- **EXIF 資訊顯示**
+  - 焦距、光圈、快門、ISO、日期時間
+  - 使用 Inter 字型，Cameramark 風格排版
 
-- **14 coding agents** — Claude Code, Cursor, VS Code, Windsurf, Codex, Zed, JetBrains, Augment, Cline, Roo Code, Continue, Amazon Q, Gemini CLI, Antigravity
-- **4 MCP modes** — Official Remote (OAuth), Official Desktop, Framelink Community (PAT), or Both (recommended)
-- **3 languages** — English, 繁體中文, 日本語
-- **Multi-agent select** — configure multiple agents in one run / 一次設定多個 agent
-- **Smart merge** — detects existing config, merges Figma entries while preserving your other MCP servers / 偵測現有設定檔，合併而非覆蓋
-- **Auto backup** — creates `.bak` before modifying any existing file / 修改前自動備份
-- **CSS + Frontend framework** — independent selection: Tailwind / Bootstrap / CSS Modules / SCSS / Pure CSS × React / Vue / Svelte / Angular / Next.js / Nuxt
-- **Style modes** — Pixel Perfect, Balanced, or Design Reference
-- **Design-to-code rules** — generates best-practice rules file in each agent's native format (`.mdc`, `.md`, `.clinerules`, etc.)
-- **SVG fallback** — when rate-limited, rules guide the agent to infer design from copied SVG
-- **Rate limit awareness** — shows Figma API limits for your plan tier and embeds limits in rules
+- **批次匯入**
+  - 支援選擇多張照片或整個資料夾匯入，含進度條顯示
 
-## Supported Agents / 支援的 Agent
+- **每張照片獨立設定**
+  - 切換照片時自動還原各自的設定，支援全部同步模式
 
-| Agent | Format | Key | Scope |
-|---|---|---|---|
-| Claude Code | JSON | `mcpServers` | Project / Global |
-| Cursor | JSON | `mcpServers` | Project / Global |
-| VS Code (Copilot) | JSON | `servers` | Project / Global |
-| Windsurf | JSON | `mcpServers` | Global only |
-| Codex (OpenAI) | TOML | `mcp_servers` | Project / Global |
-| Zed | JSON | `context_servers` | Global only |
-| JetBrains AI (Junie) | JSON | `mcpServers` | GUI only |
-| Augment Code | JSON | `mcpServers` | Project only |
-| Cline | JSON | `mcpServers` | GUI only |
-| Roo Code | JSON | `mcpServers` | Project only |
-| Continue | YAML | `mcpServers` | Project / Global |
-| Amazon Q | JSON | `mcpServers` | Global only |
-| Gemini CLI | JSON | `mcpServers` | Global only |
-| Antigravity (Google) | JSON | `mcpServers` | Global only |
+- **深色 / 淺色主題切換**
 
-## MCP Server Options / MCP 伺服器選項
+---
 
-| Mode | Auth | Transport | Notes |
-|---|---|---|---|
-| **Official Remote** | OAuth | HTTP | Broadest features, all plans including free |
-| **Official Desktop** | N/A | localhost:3845 | Requires Figma desktop app, paid plans only |
-| **Framelink Community** | PAT | stdio (npm) | 25% smaller output, open source |
-| **Both** (recommended) | OAuth + PAT | HTTP + stdio | Framelink for reads, Official for writes & design system |
-
-> All MCP servers share the same Figma API rate limits. Starter/View/Collab seats = 6 calls/month (unusable). Pro Full/Dev = 200/day. Enterprise Full/Dev = 600/day.
->
-> 所有 MCP 伺服器共用 Figma API 速率限制。Starter/View/Collab 座位每月僅 6 次（基本無法使用）。
-
-## Interactive Flow / 互動流程
-
-```
-🌐 Language        → English / 繁體中文 / 日本語
-🤖 Agents          → Multi-select (space to pick, enter to confirm)
-🔌 MCP Type        → Remote / Desktop / Framelink / Both
-⚠  Rate Limits     → Shows your plan's API limits
-📁 Scope           → Project / Global
-🎨 CSS Framework   → Tailwind / Bootstrap / CSS Modules / SCSS / Pure CSS
-⚛️  Frontend        → React / Vue / Svelte / Angular / Next.js / Nuxt / None
-✏️  Style Mode      → Pixel Perfect / Balanced / Design Reference
-🧩 Components      → Component First / No Components
-🔑 API Key         → Figma PAT (required for Framelink/Both)
-📋 Rules           → Generate design-to-code rules file? Yes / No
-```
-
-## Development / 開發
+## 安裝與執行
 
 ```bash
-git clone https://github.com/NelsonChen1982/figmaflow.git
-cd figmaflow
-npm install
-npm run dev      # Run with tsx (development)
-npm run build    # Build with tsup
+# 安裝依賴
+pip install -r requirements.txt
+
+# 執行
+python main.py
 ```
+
+### 系統需求
+
+- Python 3.10+
+- PyQt6
+- Pillow
+
+---
+
+## 技術架構
+
+```
+models/   → 凍結 dataclass：Photo、ExifData、BorderSettings、CanvasGeometry
+core/     → 純函式（無副作用）：exif_reader、image_processor、aspect_ratio、brand_renderer、font_manager
+gui/      → PyQt6 元件 + 訊號路由 + 背景執行緒
+```
+
+### 資料流
+
+```
+使用者載入照片（拖放 或 檔案對話框）
+  → exif_reader 讀取 EXIF（piexif 優先，exifread 備用）
+  → 建立 Photo + ExifData 凍結 dataclass
+  → 使用者在 SettingsPanel 設定 BorderSettings
+  → ProcessWorker（QThread）在背景呼叫 image_processor.process()
+  → PreviewPanel 顯示結果
+  → ExportWorker（QThread）匯出至磁碟
+```
+
+---
+
+## 路線圖
+
+- [ ] RAW 檔案讀取與解碼
+- [ ] 色調曲線調整
+- [ ] 白平衡 / 色溫調整
+- [ ] 降噪 / 銳化
+- [ ] Lightroom 風格的調色面板
+
+---
 
 ## License
 
