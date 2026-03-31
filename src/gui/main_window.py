@@ -71,7 +71,7 @@ class ProcessWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("照片白邊工具")
+        self.setWindowTitle("PicLab")
         self.setMinimumSize(1100, 700)
         self.resize(1440, 860)
 
