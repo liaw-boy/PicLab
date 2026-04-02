@@ -1,7 +1,7 @@
 {
-  "pythonVersion": "3.14",
-  "pythonPlatform": "Windows",
-  "pythonPath": "C:/Users/liawboy/AppData/Local/Programs/Python/Python314/python.exe",
+  "pythonVersion": "3.11",
+  "venvPath": ".",
+  "venv": ".venv",
   "include": ["src", "main.py", "tests"],
   "exclude": ["**/__pycache__", ".venv"],
   "typeCheckingMode": "basic",
