@@ -218,6 +218,7 @@ class SettingsPanel(QScrollArea):
         self._selected_ratio    = AspectRatioPreset.SQUARE_1_1
         self._split_crop_x: float = 0.5
         self._split_crop_y: float = 0.5
+        self._split_zoom:   float = 1.0
 
         # Logo 選項預設隱藏（與 checkbox 初始狀態同步）
         self._logo_opts.setVisible(False)
@@ -702,9 +703,10 @@ class SettingsPanel(QScrollArea):
             self._q_slider.set_value(s.jpeg_quality)
             # 版型（僅更新內部狀態，不觸發 emit）
             self._selected_template = s.template
-            # SPLIT 裁切偏移
+            # SPLIT 裁切偏移 + 縮放
             self._split_crop_x = s.split_crop_x
             self._split_crop_y = s.split_crop_y
+            self._split_zoom   = s.split_zoom
         finally:
             self._restoring = False
 
@@ -728,6 +730,7 @@ class SettingsPanel(QScrollArea):
             jpeg_quality     = self._q_slider.value(),
             split_crop_x     = self._split_crop_x,
             split_crop_y     = self._split_crop_y,
+            split_zoom       = self._split_zoom,
         )
 
     def enable_export(self, enabled: bool) -> None:

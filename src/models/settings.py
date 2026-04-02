@@ -90,6 +90,7 @@ class BorderSettings:
     output_sharpening: bool = True
     split_crop_x: float = 0.5   # SPLIT 版型橫向裁切位置 0.0-1.0
     split_crop_y: float = 0.5   # SPLIT 版型縱向裁切位置 0.0-1.0
+    split_zoom:   float = 1.0   # SPLIT 版型縮放（1.0 = fill，>1 = 放大）
 
     def border_dims(self, output_width: int = 1080) -> dict[str, int]:
         scale = output_width / 1080

@@ -413,13 +413,14 @@ def _process_split(photo: Photo, settings: BorderSettings) -> Image.Image:
     draw = ImageDraw.Draw(canvas)
     draw.line([(left_w, 0), (left_w, ch)], fill=COLOR_DIVIDER, width=div_w)
 
-    # Right panel: crop photo to fill (user-adjustable position)
+    # Right panel: crop photo to fill (user-adjustable position + zoom)
     photo_x = left_w + div_w
     photo_area_w = right_w - div_w
     rgb = photo.image.convert("RGB")
     crop = _crop_to_fill(rgb, photo_area_w, ch,
                          cx_frac=settings.split_crop_x,
-                         cy_frac=settings.split_crop_y)
+                         cy_frac=settings.split_crop_y,
+                         zoom=settings.split_zoom)
     rgb.close()
     canvas.paste(crop, (photo_x, 0))
     crop.close()
@@ -432,13 +433,15 @@ def _process_split(photo: Photo, settings: BorderSettings) -> Image.Image:
 def _crop_to_fill(
     img: Image.Image, target_w: int, target_h: int,
     cx_frac: float = 0.5, cy_frac: float = 0.5,
+    zoom: float = 1.0,
 ) -> Image.Image:
     """Scale then offset-crop to exactly target_w × target_h.
 
     cx_frac / cy_frac: 0.0 = top-left, 0.5 = centre, 1.0 = bottom-right.
+    zoom: additional scale multiplier (>1 = magnify photo).
     """
     tw, th = img.size
-    scale  = max(target_w / max(1, tw), target_h / max(1, th))
+    scale  = max(target_w / max(1, tw), target_h / max(1, th)) * max(0.5, zoom)
     sw_    = max(1, int(tw * scale))
     sh_    = max(1, int(th * scale))
     scaled = img.resize((sw_, sh_), Image.LANCZOS)

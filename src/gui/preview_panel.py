@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QHBoxLayout,
-    QSizePolicy, QScrollArea, QGraphicsOpacityEffect,
+    QSizePolicy, QScrollArea, QGraphicsOpacityEffect, QMenu, QWidgetAction,
 )
 from PyQt6.QtCore import (
     Qt, QSize, QRectF, QRect, QTimer, pyqtSignal,
@@ -501,14 +501,14 @@ class _SplitMoveBtn(QWidget):
 
 class _SplitDragOverlay(QWidget):
     """移動模式覆蓋層：
-    • 在照片面板區顯示完整原始照片（letterbox）
-    • 目前裁切框以外加灰色遮罩
-    • 裁切框用橘色虛線標示
-    • 拖曳不重繪底層，按「完成移動」才 emit 一次
+    • 照片面板顯示完整原始照片（letterbox），讓使用者看到原圖全貌
+    • 橘色虛線框 = 目前裁切框（輸出會顯示的範圍）
+    • 框內正常顯示，框外灰色遮罩
+    • 拖曳移動裁切框，按「完成移動」才 emit 一次
     """
     dragged = pyqtSignal(float, float)
 
-    _SPLIT_LEFT = 0.35   # 左側資訊欄佔比，與 image_processor 一致
+    _SPLIT_LEFT = 0.35
 
     def __init__(self, parent, photo_lbl: "QLabel"):
         super().__init__(parent)
@@ -526,8 +526,6 @@ class _SplitDragOverlay(QWidget):
         self._photo_h:   int = 1
         self.hide()
 
-    # ── 公開 API ──────────────────────────────────────────────────────────────
-
     def set_crop(self, cx: float, cy: float) -> None:
         self._crop_x = cx
         self._crop_y = cy
@@ -541,83 +539,73 @@ class _SplitDragOverlay(QWidget):
     def get_crop(self) -> tuple[float, float]:
         return self._crop_x, self._crop_y
 
-    # ── 內部：取得照片面板在 overlay 中的位置 ─────────────────────────────────
-
     def _panel_rect(self) -> "QRect | None":
-        """依 photo_lbl 目前 pixmap 計算照片面板（右 65%）在 overlay 的位置。"""
         pix = self._photo_lbl.pixmap()
         if pix is None or pix.isNull():
             return None
-        cw, ch   = self.width(), self.height()
-        pw, ph   = pix.width(), pix.height()
-        off_x    = (cw - pw) // 2
-        off_y    = (ch - ph) // 2
-        left_w   = int(pw * self._SPLIT_LEFT)
+        cw, ch = self.width(), self.height()
+        pw, ph = pix.width(), pix.height()
+        off_x  = (cw - pw) // 2
+        off_y  = (ch - ph) // 2
+        left_w = int(pw * self._SPLIT_LEFT)
         return QRect(off_x + left_w, off_y, pw - left_w, ph)
 
     def _crop_rect(self, panel: "QRect") -> "QRect":
-        """裁切框在 overlay 中的矩形（fill→fit 座標轉換）。"""
+        """裁切框在 overlay 的位置（fill→fit 座標轉換）。"""
         if self._photo_pix is None or self._photo_pix.isNull():
             return panel
-        pw, ph   = self._photo_w, self._photo_h
+        pw, ph       = self._photo_w, self._photo_h
         pan_w, pan_h = panel.width(), panel.height()
-
-        fill_s   = max(pan_w / pw, pan_h / ph)
-        avail_x  = max(0.0, pw * fill_s - pan_w)
-        avail_y  = max(0.0, ph * fill_s - pan_h)
-        cx_px    = avail_x * self._crop_x
-        cy_px    = avail_y * self._crop_y
-
-        fit_s    = min(pan_w / pw, pan_h / ph)
-        fit_w    = int(pw * fit_s)
-        fit_h    = int(ph * fit_s)
-        ratio    = fit_s / fill_s
-
+        fill_s = max(pan_w / pw, pan_h / ph)
+        avail_x = max(0.0, pw * fill_s - pan_w)
+        avail_y = max(0.0, ph * fill_s - pan_h)
+        fit_s  = min(pan_w / pw, pan_h / ph)
+        ratio  = fit_s / fill_s
+        fit_w  = int(pw * fit_s)
+        fit_h  = int(ph * fit_s)
         fx = panel.x() + (pan_w - fit_w) // 2
         fy = panel.y() + (pan_h - fit_h) // 2
         return QRect(
-            fx + int(cx_px * ratio),
-            fy + int(cy_px * ratio),
+            fx + int(avail_x * self._crop_x * ratio),
+            fy + int(avail_y * self._crop_y * ratio),
             int(pan_w * ratio),
             int(pan_h * ratio),
         )
-
-    # ── 繪製 ──────────────────────────────────────────────────────────────────
 
     def paintEvent(self, _) -> None:
         panel = self._panel_rect()
         if panel is None:
             return
-
         p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-        # 1. 原始照片完整顯示（letterbox 在照片面板區）
+        # 原圖 fill-scale，依 crop 偏移繪製（圖片在固定框內移動）
         if self._photo_pix and not self._photo_pix.isNull():
-            pw, ph = self._photo_w, self._photo_h
-            fit_s  = min(panel.width() / pw, panel.height() / ph)
-            fit_w  = int(pw * fit_s)
-            fit_h  = int(ph * fit_s)
-            fx     = panel.x() + (panel.width()  - fit_w) // 2
-            fy     = panel.y() + (panel.height() - fit_h) // 2
-            p.drawPixmap(fx, fy, fit_w, fit_h, self._photo_pix)
+            pw, ph  = self._photo_w, self._photo_h
+            pan_w   = panel.width()
+            pan_h   = panel.height()
+            fill_s  = max(pan_w / pw, pan_h / ph)
+            fill_w  = int(pw * fill_s)
+            fill_h  = int(ph * fill_s)
+            avail_x = max(0, fill_w - pan_w)
+            avail_y = max(0, fill_h - pan_h)
+            src_x   = int(avail_x * self._crop_x)
+            src_y   = int(avail_y * self._crop_y)
+            scaled  = self._photo_pix.scaled(
+                fill_w, fill_h,
+                Qt.AspectRatioMode.IgnoreAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            p.setClipRect(panel)
+            p.drawPixmap(panel.x() - src_x, panel.y() - src_y, scaled)
+            p.setClipping(False)
 
-        crop = self._crop_rect(panel)
-
-        # 2. 灰色遮罩蓋住裁切框以外的照片區
-        gray        = QColor(0, 0, 0, 130)
-        dark_region = QRegion(panel).subtracted(QRegion(crop))
-        p.setClipRegion(dark_region)
-        p.fillRect(panel, gray)
-        p.setClipping(False)
-
-        # 3. 橘色虛線框住裁切框
+        # 固定橘色虛線框住面板邊緣
         pen = QPen(QColor(255, 140, 0), 2, Qt.PenStyle.DashLine)
         pen.setDashPattern([8, 4])
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRect(crop.adjusted(1, 1, -1, -1))
-
+        p.drawRect(panel.adjusted(1, 1, -1, -1))
         p.end()
 
     # ── 滑鼠事件 ──────────────────────────────────────────────────────────────
@@ -934,12 +922,221 @@ class ImageStrip(QScrollArea):
         self.sync_changed.emit(set(self._synced))
 
 
+# ── Zoom Control ─────────────────────────────────────────────────────────────
+
+_ZOOM_PRESETS: list[tuple[str, float]] = [
+    ("適合視窗", 1.0),
+    ("50%",   0.5),
+    ("75%",   0.75),
+    ("100%",  1.0),   # alias for 適合視窗
+    ("125%",  1.25),
+    ("150%",  1.5),
+    ("200%",  2.0),
+    ("300%",  3.0),
+]
+
+_ZOOM_STEP = 0.15   # +/- 按鈕每次增減量
+
+
+def _zoom_label(zoom: float) -> str:
+    """1.0 → '適合'，其他顯示百分比。"""
+    if abs(zoom - 1.0) < 0.01:
+        return "適合"
+    return f"{round(zoom * 100)}%"
+
+
+class _ZoomControl(QWidget):
+    """縮放控制列：[−]  適合 ▾  [+]
+    • −/+ 按鈕調整縮放
+    • 中間標籤點擊彈出預設清單
+    • theme-aware
+    """
+    zoom_changed = pyqtSignal(float)   # 新的縮放值
+
+    _H  = 30    # 元件高度
+    _BW = 28    # −/+ 按鈕寬度
+    _R  = 6     # 圓角
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._zoom: float = 1.0
+        self._hover_zone: int = 0   # 0=none 1=minus 2=label 3=plus
+        self.setFixedHeight(self._H)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setMouseTracking(True)
+        self.hide()
+        _tm().theme_changed.connect(lambda _: self.update())
+        self._recalc_width()
+
+    def set_zoom(self, zoom: float) -> None:
+        self._zoom = zoom
+        self._recalc_width()
+        self.update()
+
+    def _recalc_width(self) -> None:
+        fm = QFontMetrics(T.ui_font(T.FONT_SM))
+        label_w = fm.horizontalAdvance(_zoom_label(self._zoom)) + 24 + 10  # text + arrow gap
+        self.setFixedWidth(self._BW * 2 + max(label_w, 52))
+
+    # ── 區域計算 ────────────────────────────────────────────────────────────
+
+    def _minus_rect(self) -> QRect:
+        return QRect(0, 0, self._BW, self._H)
+
+    def _plus_rect(self) -> QRect:
+        return QRect(self.width() - self._BW, 0, self._BW, self._H)
+
+    def _label_rect(self) -> QRect:
+        return QRect(self._BW, 0, self.width() - self._BW * 2, self._H)
+
+    def _zone_at(self, pos) -> int:
+        if self._minus_rect().contains(pos): return 1
+        if self._plus_rect().contains(pos):  return 3
+        if self._label_rect().contains(pos): return 2
+        return 0
+
+    # ── 事件 ────────────────────────────────────────────────────────────────
+
+    def mouseMoveEvent(self, e) -> None:
+        z = self._zone_at(e.pos())
+        if z != self._hover_zone:
+            self._hover_zone = z
+            self.setCursor(Qt.CursorShape.PointingHandCursor if z else Qt.CursorShape.ArrowCursor)
+            self.update()
+
+    def leaveEvent(self, e) -> None:
+        self._hover_zone = 0
+        self.update()
+        super().leaveEvent(e)
+
+    def mousePressEvent(self, e) -> None:
+        if e.button() != Qt.MouseButton.LeftButton:
+            return
+        zone = self._zone_at(e.pos())
+        if zone == 1:
+            new_z = max(0.3, self._zoom - _ZOOM_STEP)
+            self._emit(new_z)
+        elif zone == 3:
+            new_z = min(6.0, self._zoom + _ZOOM_STEP)
+            self._emit(new_z)
+        elif zone == 2:
+            self._show_presets_menu()
+
+    def _emit(self, zoom: float) -> None:
+        self._zoom = zoom
+        self._recalc_width()
+        self.update()
+        self.zoom_changed.emit(zoom)
+
+    def _show_presets_menu(self) -> None:
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background: {T.SURFACE};
+                border: 1px solid {T.BORDER};
+                border-radius: 8px;
+                padding: 4px 0;
+                font-size: {T.FONT_SM}px;
+                color: {T.TEXT_PRIMARY};
+            }}
+            QMenu::item {{
+                padding: 6px 20px;
+                border-radius: 4px;
+                margin: 1px 4px;
+            }}
+            QMenu::item:selected {{
+                background: {T.PRIMARY_ALPHA};
+                color: {T.TEXT_PRIMARY};
+            }}
+            QMenu::item:checked {{
+                font-weight: bold;
+            }}
+        """)
+        seen = set()
+        for label, val in _ZOOM_PRESETS:
+            key = round(val * 100)
+            if key in seen:
+                continue
+            seen.add(key)
+            act = menu.addAction(label)
+            act.setCheckable(True)
+            act.setChecked(abs(self._zoom - val) < 0.01)
+            act.setData(val)
+        menu.triggered.connect(lambda a: self._emit(a.data()))
+        # 在元件左下方彈出
+        menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
+
+    # ── 繪製 ────────────────────────────────────────────────────────────────
+
+    def paintEvent(self, _) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H, R = self.width(), self.height(), self._R
+
+        # ── 背景膠囊 ──
+        bg = QColor(T.SURFACE)
+        bg.setAlpha(220)
+        p.setBrush(QBrush(bg))
+        p.setPen(QPen(QColor(T.BORDER), 1.0))
+        p.drawRoundedRect(QRectF(0.5, 0.5, W - 1, H - 1), R, R)
+
+        # ── 分隔線 ──
+        div_col = QColor(T.BORDER)
+        div_col.setAlpha(120)
+        p.setPen(QPen(div_col, 1))
+        bw = self._BW
+        p.drawLine(bw, 4, bw, H - 4)
+        p.drawLine(W - bw, 4, W - bw, H - 4)
+
+        # ── − 按鈕 ──
+        m_col = QColor(T.PRIMARY if self._hover_zone == 1 else T.TEXT_SECONDARY)
+        p.setPen(QPen(m_col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        cx = bw // 2
+        cy = H // 2
+        p.drawLine(cx - 5, cy, cx + 5, cy)
+
+        # ── + 按鈕 ──
+        p_col = QColor(T.PRIMARY if self._hover_zone == 3 else T.TEXT_SECONDARY)
+        p.setPen(QPen(p_col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        rx = W - bw // 2
+        p.drawLine(rx - 5, cy, rx + 5, cy)
+        p.drawLine(rx, cy - 5, rx, cy + 5)
+
+        # ── 標籤文字 + ▾ ──
+        lbl = _zoom_label(self._zoom)
+        fnt = T.ui_font(T.FONT_SM, QFont.Weight.Medium)
+        p.setFont(fnt)
+        lbl_col = QColor(T.PRIMARY if self._hover_zone == 2 else T.TEXT_PRIMARY)
+        p.setPen(QPen(lbl_col))
+        lr = self._label_rect()
+        fm = QFontMetrics(fnt)
+        tw = fm.horizontalAdvance(lbl)
+        arr_gap = 10   # space for ▾
+        total   = tw + arr_gap
+        tx = lr.x() + (lr.width() - total) // 2
+        p.drawText(QRect(tx, 0, tw + 2, H), Qt.AlignmentFlag.AlignVCenter, lbl)
+
+        # 小箭頭 ▾
+        arrow_col = QColor(T.PRIMARY if self._hover_zone == 2 else T.TEXT_SECONDARY)
+        p.setPen(QPen(arrow_col, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+        ax = tx + tw + 6
+        ay = H // 2
+        path = QPainterPath()
+        path.moveTo(ax - 3, ay - 1)
+        path.lineTo(ax,     ay + 2)
+        path.lineTo(ax + 3, ay - 1)
+        p.drawPath(path)
+
+        p.end()
+
+
 # ── Preview Panel ─────────────────────────────────────────────────────────────
 
 class PreviewPanel(QWidget):
     open_file_requested = pyqtSignal()
     photo_switched      = pyqtSignal(int)
     split_crop_changed  = pyqtSignal(float, float)   # (crop_x, crop_y) 0-1
+    split_zoom_changed  = pyqtSignal(float)           # zoom 0.5-4.0
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -996,10 +1193,16 @@ class PreviewPanel(QWidget):
         self._split_drag = _SplitDragOverlay(self._canvas, self._photo_lbl)
         # 不直接 connect dragged → split_crop_changed，改由按鈕控制
 
+        # 縮放控制列（右下角浮動）
+        self._zoom_ctrl = _ZoomControl(self._canvas)
+        self._zoom_ctrl.zoom_changed.connect(self._on_zoom_ctrl_changed)
+
         self._pixmap: QPixmap | None = None
         self._has_image = False
         self._sz_preset = None
         self._template: TemplateStyle = TemplateStyle.CLASSIC
+        self._zoom: float = 1.0
+        self._split_zoom: float = 1.0   # 最終輸出縮放，移動模式滾輪控制
         _tm().theme_changed.connect(self._on_theme)
 
     # ── 代理 ImageStrip 的同步 / 刪除信號給 MainWindow ────────────────────────
@@ -1021,6 +1224,26 @@ class PreviewPanel(QWidget):
 
     def resizeEvent(self, e) -> None:
         super().resizeEvent(e)
+        self._fit()
+
+    def wheelEvent(self, e) -> None:
+        if not self._has_image:
+            e.ignore()
+            return
+        delta = e.angleDelta().y()
+        factor = 1.12 if delta > 0 else 1 / 1.12
+        # 移動模式：滾輪控制最終輸出縮放（split_zoom）
+        if self._move_btn.is_on:
+            self._split_zoom = max(1.0, min(4.0, self._split_zoom * factor))
+            self.split_zoom_changed.emit(self._split_zoom)
+        else:
+            self._zoom = max(0.3, min(6.0, self._zoom * factor))
+            self._zoom_ctrl.set_zoom(self._zoom)
+            self._fit()
+        e.accept()
+
+    def _on_zoom_ctrl_changed(self, zoom: float) -> None:
+        self._zoom = max(0.3, min(6.0, zoom))
         self._fit()
 
     def set_aspect_ratio(self, preset: AspectRatioPreset) -> None:
@@ -1058,8 +1281,9 @@ class PreviewPanel(QWidget):
         if on:
             self._split_drag.setVisible(True)
             self._split_drag.raise_()
+            # 按鈕必須在 overlay 上方，否則點擊被攔截
+            self._move_btn.raise_()
         else:
-            # 按下「完成移動」→ 取得最終位置，emit 一次，隱藏覆蓋層
             self._split_drag.hide()
             cx, cy = self._split_drag.get_crop()
             self.split_crop_changed.emit(cx, cy)
@@ -1068,8 +1292,12 @@ class PreviewPanel(QWidget):
         """從外部更新 SPLIT 裁切位置，不觸發 emit。"""
         self._split_drag.set_crop(max(0.0, min(1.0, cx)), max(0.0, min(1.0, cy)))
 
+    def set_split_zoom(self, zoom: float) -> None:
+        """從外部更新 SPLIT 縮放，不觸發 emit。"""
+        self._split_zoom = max(1.0, min(4.0, zoom))
+
     def set_split_photo(self, pil_image: "Image.Image") -> None:
-        """傳入原始照片供移動模式覆蓋層顯示完整圖片。"""
+        """傳入原始照片供移動模式顯示完整圖片。"""
         img  = pil_image.convert("RGB")
         long = max(img.width, img.height)
         if long > 900:
@@ -1077,12 +1305,16 @@ class PreviewPanel(QWidget):
             img = img.resize((int(img.width * s), int(img.height * s)), Image.BILINEAR)
         self._split_drag.set_photo(_pil_to_pixmap(img), pil_image.width, pil_image.height)
 
+
+
     def show_image(self, pil_image: Image.Image) -> None:
         self._has_image = True
         self._pixmap = _pil_to_pixmap(pil_image)
         self._drop.hide()
         self._photo_lbl.show()
         self._move_btn.setVisible(self._template == TemplateStyle.SPLIT)
+        self._zoom_ctrl.set_zoom(self._zoom)
+        self._zoom_ctrl.show()
         self._update_sz_toggle_visibility()
         # Defer _fit() so the layout (incl. image strip) settles first
         QTimer.singleShot(0, self._fit)
@@ -1097,6 +1329,7 @@ class PreviewPanel(QWidget):
         self._pixmap = None
         self._photo_lbl.hide()
         self._split_drag.hide()
+        self._zoom_ctrl.hide()
         self._move_btn.hide()
         self._move_btn.set_on(False)
         self._drop.show()
@@ -1148,14 +1381,22 @@ class PreviewPanel(QWidget):
         else:
             move_y = 8
         self._move_btn.move(8, move_y)
+        # 縮放控制：右下角，確保在 split_drag 上方
+        zw = self._zoom_ctrl.width()
+        zh = self._zoom_ctrl.height()
+        self._zoom_ctrl.move(cw - zw - 8, ch - zh - 8)
+        self._zoom_ctrl.raise_()
 
         if self._pixmap is None:
             return
 
-        pad = 24
-        size = QSize(max(1, cw - pad), max(1, ch - pad))
+        pad  = 24
+        base = QSize(max(1, cw - pad), max(1, ch - pad))
+        if self._zoom != 1.0:
+            base = QSize(int(base.width() * self._zoom),
+                         int(base.height() * self._zoom))
         self._photo_lbl.setPixmap(self._pixmap.scaled(
-            size,
+            base,
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
         ))

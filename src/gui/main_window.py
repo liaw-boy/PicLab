@@ -136,6 +136,7 @@ class MainWindow(QMainWindow):
         self._preview.sync_changed.connect(self._on_sync_changed)
         self._preview.delete_requested.connect(self._delete_photo)
         self._preview.split_crop_changed.connect(self._on_split_crop_changed)
+        self._preview.split_zoom_changed.connect(self._on_split_zoom_changed)
         body_lay.addWidget(self._preview, 1)
 
         # Settings panel
@@ -347,9 +348,9 @@ class MainWindow(QMainWindow):
             self._preview.set_aspect_ratio(s.aspect_ratio)
             self._preview.set_template(s.template)
             self._preview.set_split_crop(s.split_crop_x, s.split_crop_y)
+            self._preview.set_split_zoom(s.split_zoom)
             if s.template == TemplateStyle.SPLIT:
                 self._preview.set_split_photo(p.image)
-
         # 有快取就直接顯示，不重新處理
         if idx in self._processed_cache:
             self._preview.show_image(self._processed_cache[idx])
@@ -395,6 +396,23 @@ class MainWindow(QMainWindow):
             for idx in range(len(self._photos)):
                 self._photo_settings[idx] = dataclasses.replace(
                     self._photo_settings.get(idx, new_s), split_crop_x=cx, split_crop_y=cy
+                )
+                self._processed_cache.pop(idx, None)
+        else:
+            self._processed_cache.pop(self._cur_idx, None)
+        self._trigger_processing()
+
+    def _on_split_zoom_changed(self, zoom: float) -> None:
+        """SPLIT 版型滾輪縮放更新。"""
+        if self._cur_idx < 0:
+            return
+        old = self._photo_settings.get(self._cur_idx, self._settings.current_settings())
+        new_s = dataclasses.replace(old, split_zoom=zoom)
+        self._photo_settings[self._cur_idx] = new_s
+        if self._sync_all:
+            for idx in range(len(self._photos)):
+                self._photo_settings[idx] = dataclasses.replace(
+                    self._photo_settings.get(idx, new_s), split_zoom=zoom
                 )
                 self._processed_cache.pop(idx, None)
         else:

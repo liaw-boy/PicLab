@@ -32,3 +32,21 @@ exports/
 
 # Logs
 *.log
+
+# Embedded repos / external tools
+chrome-devtools-mcp/
+external/
+
+# Personal Claude Code settings
+.claude/
+
+# Temp images used for testing
+*.jpg
+*.jpeg
+*.png
+*.tiff
+*.tif
+*.webp
+*.bmp
+iphone-multifunctional-camera-watermark-shortcut-2a.jpg
+img_9487-2-1.jpg
