@@ -301,22 +301,23 @@ class _NavBtn(QWidget):
 
         # ── 背景 ──────────────────────────────────────────────────────────────
         if self._active:
-            p.setBrush(QBrush(QColor(T.PRIMARY)))
-            p.setPen(QPen(QColor(T.BORDER), 2))
+            # Dark luxury: gold-dim bg with gold icon — subtle glow rather than solid fill
+            p.setBrush(QBrush(QColor(T.GOLD_DIM)))
+            p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(M, M, W-M*2, H-M*2, R, R)
-            icon_col = QColor(T.TEXT_ON_PRIMARY)
-            text_col = QColor(T.TEXT_ON_PRIMARY)
+            icon_col = QColor(T.GOLD)
+            text_col = QColor(T.GOLD)
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.SURFACE_2)))
-            p.setPen(QPen(QColor(T.BORDER_LIGHT), 1.5))
+            p.setBrush(QBrush(QColor(T.GLASS_2)))
+            p.setPen(Qt.PenStyle.NoPen)
             p.drawRoundedRect(M, M, W-M*2, H-M*2, R, R)
             icon_col = QColor(T.TEXT_PRIMARY)
-            text_col = QColor(T.TEXT_PRIMARY)
+            text_col = QColor(T.TEXT_SECONDARY)
         else:
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(Qt.PenStyle.NoPen)
-            icon_col = QColor(T.TEXT_SECONDARY)
-            text_col = QColor(T.TEXT_PRIMARY)
+            icon_col = QColor(T.TEXT_MUTED)
+            text_col = QColor(T.TEXT_MUTED)
 
         # ── 圖示區（上 3/4）──────────────────────────────────────────────────
         cx = W // 2
@@ -327,7 +328,7 @@ class _NavBtn(QWidget):
             draw_fn(p, cx, cy, icon_col)
 
         # ── 標籤文字（下方）──────────────────────────────────────────────────
-        p.setFont(T.ui_font(T.FONT_SM, QFont.Weight.Bold if self._active else QFont.Weight.Medium))
+        p.setFont(T.ui_font(T.FONT_XS, QFont.Weight.Medium))
         p.setPen(QPen(text_col))
         p.drawText(
             QRect(0, H - 24, W, 20),
@@ -365,15 +366,15 @@ class _OpenBtn(QWidget):
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
-                background: {T.SURFACE};
-                border: 1.5px solid {T.BORDER};
-                border-radius: 6px;
-                padding: 4px;
+                background: {T.SURFACE_2};
+                border: 1px solid {T.BORDER};
+                border-radius: {T.R_CARD}px;
+                padding: {T.S1}px;
                 color: {T.TEXT_PRIMARY};
-                font-size: {T.FONT_BASE}px;
+                font-size: {T.FONT_SM}px;
             }}
-            QMenu::item {{ padding: 7px 18px; border-radius: 4px; }}
-            QMenu::item:selected {{ background: {T.SURFACE_2}; }}
+            QMenu::item {{ padding: {T.S2}px {T.S4}px; border-radius: {T.R_BUTTON}px; }}
+            QMenu::item:selected {{ background: {T.GOLD_DIM}; color: {T.GOLD}; }}
         """)
         act_files  = menu.addAction("選擇照片…")
         act_folder = menu.addAction("選擇資料夾…")
@@ -394,22 +395,23 @@ class _OpenBtn(QWidget):
 
         # 背景（虛線框，強調可點擊）
         if self._hovered:
-            p.setBrush(QBrush(QColor(T.SURFACE_2)))
-            pen = QPen(QColor(T.BORDER), 2, Qt.PenStyle.SolidLine)
+            p.setBrush(QBrush(QColor(T.GOLD_DIM)))
+            pen = QPen(QColor(T.GOLD), 1.5, Qt.PenStyle.SolidLine)
         else:
             p.setBrush(Qt.BrushStyle.NoBrush)
-            pen = QPen(QColor(T.BORDER_LIGHT), 1.5, Qt.PenStyle.DashLine)
+            pen = QPen(QColor(T.BORDER), 1, Qt.PenStyle.DashLine)
             pen.setDashPattern([4, 3])
         p.setPen(pen)
         p.drawRoundedRect(M, M, W-M*2, H-M*2, T.R_CHIP, T.R_CHIP)
 
         # 圖示
-        col = QColor(T.TEXT_PRIMARY if self._hovered else T.TEXT_SECONDARY)
+        col = QColor(T.GOLD if self._hovered else T.TEXT_MUTED)
         _draw_open(p, W//2, H//2 - 6, col)
 
         # 標籤
+        lbl_col = QColor(T.GOLD if self._hovered else T.TEXT_SECONDARY)
         p.setFont(T.ui_font(T.FONT_XS, QFont.Weight.Medium))
-        p.setPen(QPen(col))
+        p.setPen(QPen(lbl_col))
         p.drawText(
             QRect(0, H-22, W, 18),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
@@ -467,8 +469,8 @@ class LeftNavBar(QWidget):
     def _apply_bg(self) -> None:
         self.setStyleSheet(f"""
             QWidget#LeftNavBar {{
-                background: {T.SIDEBAR};
-                border-right: 2px solid {T.BORDER};
+                background: {T.SURFACE};
+                border-right: 1px solid {T.BORDER};
             }}
         """)
 

@@ -93,18 +93,18 @@ class _TplBtn(QWidget):
         M = 2
 
         if self._active:
-            p.setBrush(QBrush(QColor(T.PRIMARY)))
-            p.setPen(QPen(QColor(T.BORDER), 2))
+            p.setBrush(QBrush(QColor(T.GOLD)))
+            p.setPen(Qt.PenStyle.NoPen)
             text_col = QColor(T.TEXT_ON_PRIMARY)
             weight = QFont.Weight.Bold
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.SURFACE_2)))
-            p.setPen(QPen(QColor(T.BORDER), 1.5))
+            p.setBrush(QBrush(QColor(T.GLASS_2)))
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             text_col = QColor(T.TEXT_PRIMARY)
             weight = QFont.Weight.Medium
         else:
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER_LIGHT), 1.5))
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             text_col = QColor(T.TEXT_SECONDARY)
             weight = QFont.Weight.Medium
 
@@ -169,27 +169,27 @@ class _TopBarBtn(QWidget):
         enabled = self.isEnabled()
 
         if not enabled:
-            p.setBrush(QBrush(QColor(T.SURFACE_2)))
-            p.setPen(QPen(QColor(T.BORDER_LIGHT), 1.5))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             icon_col = QColor(T.TEXT_DISABLED)
             text_col = QColor(T.TEXT_DISABLED)
             weight = QFont.Weight.Medium
         elif self._primary:
-            bg = QColor(T.PRIMARY_HOVER if self._hovered else T.PRIMARY)
+            bg = QColor(T.PRIMARY_HOVER if self._hovered else T.GOLD)
             p.setBrush(QBrush(bg))
-            p.setPen(QPen(QColor(T.BORDER), 2))
+            p.setPen(Qt.PenStyle.NoPen)
             icon_col = QColor(T.TEXT_ON_PRIMARY)
             text_col = QColor(T.TEXT_ON_PRIMARY)
             weight = QFont.Weight.Bold
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.SURFACE_2)))
-            p.setPen(QPen(QColor(T.BORDER), 1.5))
+            p.setBrush(QBrush(QColor(T.GLASS_2)))
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             icon_col = QColor(T.TEXT_PRIMARY)
             text_col = QColor(T.TEXT_PRIMARY)
             weight = QFont.Weight.Medium
         else:
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER_LIGHT), 1.5))
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             icon_col = QColor(T.TEXT_SECONDARY)
             text_col = QColor(T.TEXT_SECONDARY)
             weight = QFont.Weight.Medium
@@ -295,20 +295,20 @@ class _SyncToggleBtn(QWidget):
         M = 2
 
         if self._on:
-            p.setBrush(QBrush(QColor(T.PRIMARY)))
-            p.setPen(QPen(QColor(T.BORDER), 2))
-            icon_col = QColor(T.TEXT_ON_PRIMARY)
-            text_col = QColor(T.TEXT_ON_PRIMARY)
+            p.setBrush(QBrush(QColor(T.GOLD_DIM)))
+            p.setPen(QPen(QColor(T.GOLD), 1.0))
+            icon_col = QColor(T.GOLD)
+            text_col = QColor(T.GOLD)
             weight   = QFont.Weight.Bold
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.SURFACE_2)))
-            p.setPen(QPen(QColor(T.BORDER), 1.5))
+            p.setBrush(QBrush(QColor(T.GLASS_2)))
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             icon_col = QColor(T.TEXT_PRIMARY)
             text_col = QColor(T.TEXT_PRIMARY)
             weight   = QFont.Weight.Medium
         else:
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER_LIGHT), 1.5))
+            p.setPen(QPen(QColor(T.BORDER), 1.0))
             icon_col = QColor(T.TEXT_SECONDARY)
             text_col = QColor(T.TEXT_SECONDARY)
             weight   = QFont.Weight.Medium
@@ -357,7 +357,7 @@ class TopBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("TopBar")
-        self.setFixedHeight(52)
+        self.setFixedHeight(T.TITLEBAR_HEIGHT)
         self._selected = TemplateStyle.CLASSIC
         self._build()
         self._apply_style()
@@ -459,19 +459,19 @@ class TopBar(QWidget):
     def _apply_style(self) -> None:
         self.setStyleSheet(f"""
             QWidget#TopBar {{
-                background: {T.MENUBAR};
-                border-bottom: 2px solid {T.BORDER};
+                background: {T.SURFACE};
+                border-bottom: 1px solid {T.BORDER};
             }}
             QLabel#AppName {{
-                color: {T.TEXT_PRIMARY};
+                color: {T.GOLD};
                 font-size: {T.FONT_LG}px;
                 font-weight: 800;
-                letter-spacing: 1px;
+                letter-spacing: 2px;
                 background: transparent;
             }}
             QFrame#BarSep {{
-                color: {T.BORDER_LIGHT};
-                background: {T.BORDER_LIGHT};
+                color: {T.BORDER};
+                background: {T.BORDER};
                 max-width: 1px;
             }}
             QLabel#BarLabel {{

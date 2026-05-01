@@ -51,15 +51,15 @@ class _SectionHeader(QLabel):
     def _apply(self) -> None:
         self.setStyleSheet(f"""
             QLabel {{
-                color: {T.TEXT_PRIMARY};
+                color: {T.TEXT_MUTED};
                 font-family: "{T.ui_font_family()}";
-                font-size: {T.FONT_LG}px;
-                font-weight: 800;
+                font-size: {T.FONT_XS}px;
+                font-weight: 600;
                 letter-spacing: 1.5px;
-                padding: 0 0 5px 0;
+                padding: 0 0 4px 0;
                 background: transparent;
                 border: none;
-                border-bottom: 1.5px solid {T.BORDER};
+                border-bottom: 1px solid {T.BORDER};
             }}
         """)
 
@@ -81,8 +81,8 @@ class _Card(QWidget):
     def _apply(self) -> None:
         self.setStyleSheet(f"""
             QWidget#{self.objectName()} {{
-                background: {T.SURFACE};
-                border: 2px solid {T.BORDER};
+                background: {T.SURFACE_2};
+                border: 1px solid {T.BORDER};
                 border-radius: {T.R_CARD}px;
             }}
         """)
@@ -239,13 +239,13 @@ class SettingsPanel(QScrollArea):
     def _apply_panel_style(self) -> None:
         self.setStyleSheet(f"""
             QScrollArea {{
-                background: {T.SIDEBAR};
+                background: {T.SURFACE};
                 border: none;
-                border-left: 2px solid {T.BORDER};
+                border-left: 1px solid {T.BORDER};
             }}
             {T.scrollbar_qss()}
         """)
-        self._body.setStyleSheet(f"background: {T.SIDEBAR};")
+        self._body.setStyleSheet(f"background: {T.SURFACE};")
 
     # ── 區段：設定預設組 ──────────────────────────────────────────────────────
 
@@ -561,21 +561,22 @@ class SettingsPanel(QScrollArea):
         return card
 
     def _apply_chip_styles(self) -> None:
-        """Paper 風格 Chip：各自獨立，選取=反色，間距已在 layout 設定。"""
+        """Dark luxury chip: gold-dim selected, subtle glass hover."""
         for btn, _ in self._border_chips:
             sel = btn.isChecked()
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {T.PRIMARY if sel else "transparent"};
-                    color: {T.TEXT_ON_PRIMARY if sel else T.TEXT_PRIMARY};
-                    border: 2px solid {T.BORDER};
+                    background: {T.GOLD_DIM if sel else "transparent"};
+                    color: {T.GOLD if sel else T.TEXT_SECONDARY};
+                    border: 1px solid {T.GOLD if sel else T.BORDER};
                     border-radius: {T.R_CHIP}px;
-                    font-size: {T.FONT_BASE}px;
-                    font-weight: {"700" if sel else "500"};
+                    font-size: {T.FONT_SM}px;
+                    font-weight: {"600" if sel else "500"};
                     padding: 2px 16px;
                 }}
                 QPushButton:hover:!checked {{
-                    background: {T.SURFACE_2};
+                    background: {T.GLASS_2};
+                    color: {T.TEXT_PRIMARY};
                 }}
             """)
 

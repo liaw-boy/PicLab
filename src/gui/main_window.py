@@ -234,7 +234,7 @@ class MainWindow(QMainWindow):
     # ── Style ─────────────────────────────────────────────────────────────────
 
     def _apply_window_style(self) -> None:
-        self.setStyleSheet(f"QMainWindow {{ background: {T.BG}; }}")
+        self.setStyleSheet(T.app_qss())
 
     def _on_theme_change(self, dark: bool) -> None:
         self._apply_window_style()

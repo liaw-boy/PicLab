@@ -78,12 +78,11 @@ class AnimatedButton(QPushButton):
     def _apply_color(self, color: QColor) -> None:
         self._cur = color
         w = "700" if self._bold else "500"
-        # Paper 風格：粗實線邊框、無圓角、反色選取
         self.setStyleSheet(f"""
             QPushButton {{
                 background: {color.name()};
                 color: {self._ct};
-                border: 2px solid {T.BORDER};
+                border: none;
                 border-radius: {T.R_BUTTON}px;
                 padding: {self._padding};
                 font-family: "{T.ui_font_family()}";
@@ -95,7 +94,7 @@ class AnimatedButton(QPushButton):
             QPushButton:disabled {{
                 background: {T.SURFACE_2};
                 color: {T.TEXT_DISABLED};
-                border-color: {T.BORDER_LIGHT};
+                border: none;
             }}
         """)
 
@@ -176,8 +175,8 @@ class GhostButton(AnimatedButton):
         self.setStyleSheet(f"""
             QPushButton {{
                 background: transparent;
-                color: {T.TEXT_PRIMARY};
-                border: 1.5px solid {T.BORDER_LIGHT};
+                color: {T.TEXT_SECONDARY};
+                border: 1px solid {T.BORDER};
                 border-radius: {T.R_BUTTON}px;
                 padding: {self._padding};
                 font-size: {self._font_size}px;
@@ -185,7 +184,9 @@ class GhostButton(AnimatedButton):
                 text-align: center;
             }}
             QPushButton:hover {{
-                background: {T.SURFACE_3};
+                background: {T.GLASS_2};
+                color: {T.TEXT_PRIMARY};
+                border-color: {T.BORDER_LIGHT};
             }}
             QPushButton:disabled {{
                 color: {T.TEXT_DISABLED};
@@ -236,25 +237,24 @@ class SegmentedControl(QWidget):
         self.value_changed.emit(b.property("v"))
 
     def _refresh(self) -> None:
-        # Paper 風格：外框用 border，無背景色
+        # Dark luxury: subtle glass container, gold active state
         self.setStyleSheet(f"""
             QWidget {{
-                background: transparent;
-                border: 2px solid {T.BORDER};
+                background: {T.SURFACE_3};
+                border: 1px solid {T.BORDER};
                 border-radius: {T.R_BUTTON}px;
             }}
         """)
         for i, b in enumerate(self._btns):
             if i == self._sel:
-                # Paper 選取：反色（黑底白字）
                 b.setStyleSheet(f"""
                     QPushButton {{
-                        background: {T.PRIMARY};
-                        color: {T.TEXT_ON_PRIMARY};
+                        background: {T.GOLD_DIM};
+                        color: {T.GOLD};
                         border: none;
                         border-radius: {T.R_BUTTON}px;
                         font-size: {T.FONT_SM}px;
-                        font-weight: 700;
+                        font-weight: 600;
                         padding: 2px 8px;
                     }}
                 """)
@@ -262,7 +262,7 @@ class SegmentedControl(QWidget):
                 b.setStyleSheet(f"""
                     QPushButton {{
                         background: transparent;
-                        color: {T.TEXT_SECONDARY};
+                        color: {T.TEXT_MUTED};
                         border: none;
                         border-radius: {T.R_BUTTON}px;
                         font-size: {T.FONT_SM}px;
@@ -270,8 +270,8 @@ class SegmentedControl(QWidget):
                         padding: 2px 8px;
                     }}
                     QPushButton:hover {{
-                        color: {T.TEXT_PRIMARY};
-                        background: {T.SURFACE_2};
+                        color: {T.TEXT_SECONDARY};
+                        background: {T.GLASS_1};
                     }}
                 """)
 
@@ -371,11 +371,11 @@ class TemplateCard(_ScalableCard):
         LH = 20
 
         if self._selected:
-            bg, border, bw = QColor(T.PRIMARY_LIGHT), QColor(T.PRIMARY), 2.0
+            bg, border, bw = QColor(T.GOLD_DIM),  QColor(T.GOLD),   1.5
         elif self._hovered:
-            bg, border, bw = QColor(T.SURFACE_2), QColor(T.BORDER_LIGHT), 1.5
+            bg, border, bw = QColor(T.SURFACE_3), QColor(T.BORDER), 1.0
         else:
-            bg, border, bw = QColor(T.SURFACE),   QColor(T.BORDER),       1.0
+            bg, border, bw = QColor(T.SURFACE_2), QColor(T.BORDER), 1.0
 
         p.setPen(QPen(border, bw))
         p.setBrush(QBrush(bg))
@@ -389,15 +389,15 @@ class TemplateCard(_ScalableCard):
         elif self._style == TemplateStyle.ROUNDED: self._thumb_rounded(p, m, m, tw, th)
         elif self._style == TemplateStyle.SPLIT:   self._thumb_split(p, m, m, tw, th)
 
-        p.setFont(T.ui_font(T.FONT_BASE, QFont.Weight.Bold if self._selected else QFont.Weight.Normal))
-        p.setPen(QPen(QColor(T.PRIMARY if self._selected else T.TEXT_SECONDARY)))
+        p.setFont(T.ui_font(T.FONT_SM, QFont.Weight.Medium))
+        p.setPen(QPen(QColor(T.GOLD if self._selected else T.TEXT_SECONDARY)))
         p.drawText(QRectF(0, H-LH, W, LH), Qt.AlignmentFlag.AlignCenter, self._label)
         p.end()
 
     def _pc(self) -> QColor:
-        return QColor(T.PRIMARY_LIGHT) if self._selected else QColor(T.SURFACE_3)
+        return QColor(T.GOLD_DIM) if self._selected else QColor(T.SURFACE_3)
     def _pb(self) -> QColor:
-        return QColor(T.PRIMARY) if self._selected else QColor(T.BORDER_LIGHT)
+        return QColor(T.GOLD) if self._selected else QColor(T.BORDER)
 
     def _thumb_classic(self, p, x, y, w, h) -> None:
         p.setPen(QPen(self._pb(), 1)); p.setBrush(QBrush(QColor(T.SURFACE if T.is_dark() else "#ffffff")))
@@ -485,23 +485,22 @@ class RatioCard(_ScalableCard):
         W, H = self.width(), self.height()
         LH = 18
 
-        # ── Paper 風格：選取=反色實心，未選取=淺框 ──────────────────────────
+        # Dark luxury: gold-dim bg with gold text on selected, subtle surfaces elsewhere
         if self._selected:
-            # 反色：深底淺字，邊框粗
-            bg   = QColor(T.PRIMARY)
-            border_c = QColor(T.BORDER)
-            bw   = 2.5
-            txt_c = QColor(T.TEXT_ON_PRIMARY)
+            bg       = QColor(T.GOLD_DIM)
+            border_c = QColor(T.GOLD)
+            bw       = 1.5
+            txt_c    = QColor(T.GOLD)
         elif self._hovered:
-            bg   = QColor(T.SURFACE_2)
+            bg       = QColor(T.SURFACE_3)
             border_c = QColor(T.BORDER)
-            bw   = 1.5
-            txt_c = QColor(T.TEXT_PRIMARY)
+            bw       = 1.0
+            txt_c    = QColor(T.TEXT_PRIMARY)
         else:
-            bg   = QColor(T.SURFACE)
-            border_c = QColor(T.BORDER_LIGHT)
-            bw   = 1.0
-            txt_c = QColor(T.TEXT_SECONDARY)
+            bg       = QColor(T.SURFACE_2)
+            border_c = QColor(T.BORDER)
+            bw       = 1.0
+            txt_c    = QColor(T.TEXT_SECONDARY)
 
         p.setPen(QPen(border_c, bw))
         p.setBrush(QBrush(bg))
@@ -516,12 +515,12 @@ class RatioCard(_ScalableCard):
         tx, ty = (W-tw_)//2, 4+(ta_h-th_)//2
 
         if self._selected:
-            thumb_fill   = QColor(T.TEXT_ON_PRIMARY)
-            thumb_fill.setAlpha(60)
-            thumb_border = QColor(T.TEXT_ON_PRIMARY)
+            thumb_fill   = QColor(T.GOLD)
+            thumb_fill.setAlpha(40)
+            thumb_border = QColor(T.GOLD)
         else:
             thumb_fill   = QColor(T.SURFACE_3)
-            thumb_border = QColor(T.BORDER_LIGHT)
+            thumb_border = QColor(T.BORDER)
 
         p.setPen(QPen(thumb_border, 1.2))
         p.setBrush(QBrush(thumb_fill))
@@ -645,13 +644,13 @@ class SectionHeader(QLabel):
     def _apply(self) -> None:
         self.setStyleSheet(f"""
             QLabel {{
-                color: {T.TEXT_PRIMARY};
-                font-size: {T.FONT_LG}px;
-                font-weight: 800;
-                letter-spacing: 1px;
-                padding: 0 0 3px 0;
+                color: {T.TEXT_MUTED};
+                font-size: {T.FONT_XS}px;
+                font-weight: 600;
+                letter-spacing: 1.5px;
+                padding: 0 0 4px 0;
                 background: transparent;
                 border: none;
-                border-bottom: 1px solid {T.BORDER_LIGHT};
+                border-bottom: 1px solid {T.BORDER};
             }}
         """)
