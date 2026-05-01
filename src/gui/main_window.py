@@ -327,6 +327,7 @@ class MainWindow(QMainWindow):
         self._act(fm, "開啟資料夾…","Ctrl+Shift+O", self._open_folder)
         fm.addSeparator()
         self._act(fm, "匯出…",      "Ctrl+S",       self._on_export)
+        self._act(fm, "發布到 Instagram…", "Ctrl+Shift+P", self._on_publish_ig)
         fm.addSeparator()
         self._act(fm, "結束",       "Ctrl+Q",       self.close)
 
@@ -943,3 +944,19 @@ class MainWindow(QMainWindow):
         ExportDialog(self._processed_cache[self._cur_idx],
                      self._settings.current_settings(),
                      default_dir=d, parent=self).exec()
+
+    def _on_publish_ig(self) -> None:
+        if self._cur_idx not in self._processed_cache:
+            QMessageBox.information(self, "提示", "請先載入照片並等待預覽完成")
+            return
+        import tempfile, os
+        from src.gui.publish_dialog import PublishDialog
+        pil_img = self._processed_cache[self._cur_idx]
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp.close()
+        pil_img.save(tmp.name, "JPEG", quality=95)
+        preview = self._preview.current_pixmap()
+        try:
+            PublishDialog(tmp.name, preview, parent=self).exec()
+        finally:
+            os.unlink(tmp.name)

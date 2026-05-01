@@ -1362,6 +1362,9 @@ class PreviewPanel(QWidget):
 
 
 
+    def current_pixmap(self) -> "QPixmap | None":
+        return self._pixmap
+
     def show_image(self, pil_image: Image.Image) -> None:
         self._has_image = True
         self._pixmap = _pil_to_pixmap(pil_image)
