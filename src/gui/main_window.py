@@ -69,17 +69,25 @@ class _RawDecodeWorker(QThread):
             self.error.emit(self._idx, str(e))
 
 
+_PREVIEW_MAX_PX = 1_200_000   # 預覽最大像素數（約 1MP，確保 <0.3s）
+
+
 class GradeWorker(QThread):
-    """步驟 1：套用調色，產出 graded PIL.Image。"""
+    """步驟 1：套用調色，產出 graded PIL.Image。
+    preview_only=True 時先縮圖再調色（即時預覽用）；
+    preview_only=False 時處理原始全解析度（匯出用）。
+    """
     result_ready = pyqtSignal(int, object)   # (photo_idx, PIL.Image)
     error        = pyqtSignal(int, str)
 
-    def __init__(self, photo_idx: int, photo: Photo, grade: GradeSettings):
+    def __init__(self, photo_idx: int, photo: Photo, grade: GradeSettings,
+                 preview_only: bool = True):
         super().__init__()
-        self._photo_idx = photo_idx
-        self._photo     = photo
-        self._grade     = grade
-        self._cancel    = False
+        self._photo_idx    = photo_idx
+        self._photo        = photo
+        self._grade        = grade
+        self._preview_only = preview_only
+        self._cancel       = False
 
     def cancel(self) -> None:
         self._cancel = True
@@ -88,7 +96,15 @@ class GradeWorker(QThread):
         if self._cancel:
             return
         try:
-            result = color_grader.apply(self._photo.image, self._grade)
+            src = self._photo.image
+            if self._preview_only:
+                w, h = src.size
+                total = w * h
+                if total > _PREVIEW_MAX_PX:
+                    scale = (_PREVIEW_MAX_PX / total) ** 0.5
+                    src = src.resize((int(w * scale), int(h * scale)),
+                                     Image.LANCZOS)
+            result = color_grader.apply(src, self._grade)
             if not self._cancel:
                 self.result_ready.emit(self._photo_idx, result)
         except Exception as e:

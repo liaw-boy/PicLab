@@ -410,12 +410,56 @@ def _apply_split_tone(arr: F32, h_hue: int, h_sat: int,
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _apply_noise_reduction(arr: F32, amount: int) -> F32:
+    """
+    雜色消除：
+    - amount 1~40  → 快速 Bilateral filter（保留邊緣）
+    - amount 41~100 → Non-Local Means（LR 同等演算法，效果最佳）
+    分離亮度雜訊（L 通道）與色彩雜訊（a/b 通道），各自處理。
+    """
     if amount == 0:
         return arr
-    radius = amount / 100.0 * 2.5
-    img = Image.fromarray((arr * 255).astype(np.uint8), "RGB")
-    blurred = img.filter(ImageFilter.GaussianBlur(radius))
-    return np.array(blurred, dtype=np.float32) / 255.0
+
+    try:
+        import cv2
+        uint8 = (arr * 255).astype(np.uint8)
+        # 轉 Lab 分離亮度與色彩雜訊
+        lab = cv2.cvtColor(uint8, cv2.COLOR_RGB2Lab)
+        L, a, b = lab[:, :, 0], lab[:, :, 1], lab[:, :, 2]
+
+        lum_strength = amount / 100.0
+        col_strength = lum_strength * 0.5   # 色彩雜訊通常比亮度少
+
+        if amount <= 40:
+            # Bilateral：速度快，保留邊緣
+            d = max(3, int(lum_strength * 11) | 1)
+            sigma = lum_strength * 80
+            L_out = cv2.bilateralFilter(L, d, sigma, sigma)
+            cs = col_strength * 40
+            cd = max(3, int(col_strength * 7) | 1)
+            a_out = cv2.bilateralFilter(a, cd, cs, cs)
+            b_out = cv2.bilateralFilter(b, cd, cs, cs)
+        else:
+            # Non-Local Means：最佳品質，適合高 ISO
+            h_lum = 3 + lum_strength * 22   # 3~25，與雜訊強度對應
+            h_col = 2 + col_strength * 10
+            # 亮度 NLM（L 通道）
+            L_out = cv2.fastNlMeansDenoising(
+                L, None, h=h_lum, templateWindowSize=7, searchWindowSize=21)
+            # 色彩 NLM（a/b 通道，單獨處理避免跨通道干擾）
+            a_out = cv2.fastNlMeansDenoising(
+                a, None, h=h_col, templateWindowSize=7, searchWindowSize=21)
+            b_out = cv2.fastNlMeansDenoising(
+                b, None, h=h_col, templateWindowSize=7, searchWindowSize=21)
+
+        lab_out = cv2.merge([L_out, a_out, b_out])
+        rgb_out = cv2.cvtColor(lab_out, cv2.COLOR_Lab2RGB)
+        return rgb_out.astype(np.float32) / 255.0
+
+    except ImportError:
+        # Fallback：cv2 不可用時用 Gaussian blur
+        radius = amount / 100.0 * 2.5
+        img = Image.fromarray((arr * 255).astype(np.uint8), "RGB")
+        return np.array(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) / 255.0
 
 
 def _apply_sharpening(arr: F32, amount: int, detail_mask: int) -> F32:
