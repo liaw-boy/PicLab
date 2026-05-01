@@ -329,6 +329,8 @@ class ColorGradePanel(QWidget):
 
         self._build_wb_section(lay)
         lay.addWidget(_divider())
+        self._build_transform_section(lay)
+        lay.addWidget(_divider())
         self._build_exposure_section(lay)
         lay.addWidget(_divider())
         self._build_hsl_section(lay)
@@ -336,6 +338,14 @@ class ColorGradePanel(QWidget):
         self._build_curve_section(lay)
         lay.addWidget(_divider())
         self._build_detail_section(lay)
+        lay.addWidget(_divider())
+        self._build_presence_section(lay)
+        lay.addWidget(_divider())
+        self._build_bw_section(lay)
+        lay.addWidget(_divider())
+        self._build_split_tone_section(lay)
+        lay.addWidget(_divider())
+        self._build_effects_section(lay)
         lay.addWidget(_divider())
         self._build_film_section(lay)
         lay.addSpacing(T.S4)
@@ -350,6 +360,134 @@ class ColorGradePanel(QWidget):
         lay.addStretch()
         scroll.setWidget(content)
         outer.addWidget(scroll)
+
+    # ── 臨場感 ───────────────────────────────────────────────────────────────────
+
+    def _build_presence_section(self, lay: QVBoxLayout) -> None:
+        anchor = _section_label("臨場感")
+        self._section_anchors["presence"] = anchor
+        lay.addWidget(anchor)
+
+        rows = [
+            ("紋理",       "texture",    -100, 100, 0),
+            ("清晰度",     "clarity",    -100, 100, 0),
+            ("去霧",       "dehaze",     -100, 100, 0),
+            ("自然飽和度", "vibrance",   -100, 100, 0),
+            ("飽和度",     "saturation", -100, 100, 0),
+        ]
+        self._presence_rows: dict[str, _SliderRow] = {}
+        for label, field, mn, mx, default in rows:
+            row = _SliderRow(label, mn, mx, default)
+            row.value_changed.connect(lambda v, f=field: self._update(f, v))
+            self._presence_rows[field] = row
+            lay.addWidget(row)
+
+    # ── 黑白 ─────────────────────────────────────────────────────────────────────
+
+    def _build_bw_section(self, lay: QVBoxLayout) -> None:
+        anchor = _section_label("黑白")
+        self._section_anchors["bw"] = anchor
+        lay.addWidget(anchor)
+
+        self._bw_toggle = QPushButton("彩色 / 黑白")
+        self._bw_toggle.setObjectName("ChipBtn")
+        self._bw_toggle.setCheckable(True)
+        self._bw_toggle.setFixedHeight(28)
+        self._bw_toggle.toggled.connect(self._on_bw_toggle)
+        lay.addWidget(self._bw_toggle)
+
+        bw_labels = ["紅色", "橙色", "黃色", "綠色", "青色", "藍色", "紫色", "洋紅"]
+        self._bw_rows: list[_SliderRow] = []
+        for i, label in enumerate(bw_labels):
+            row = _SliderRow(label, -100, 100, 0)
+            row.value_changed.connect(self._on_bw_mix_changed)
+            self._bw_rows.append(row)
+            lay.addWidget(row)
+
+    def _on_bw_toggle(self, checked: bool) -> None:
+        treatment = "bw" if checked else "color"
+        self._update("treatment", treatment)
+
+    def _on_bw_mix_changed(self) -> None:
+        vals = tuple(row.value() for row in self._bw_rows)
+        self._settings = dataclasses.replace(self._settings, bw_mix=vals)
+        self.grade_changed.emit(self._settings)
+
+    # ── 分割色調 ──────────────────────────────────────────────────────────────────
+
+    def _build_split_tone_section(self, lay: QVBoxLayout) -> None:
+        anchor = _section_label("分割色調")
+        self._section_anchors["split_tone"] = anchor
+        lay.addWidget(anchor)
+
+        hi_lbl = QLabel("亮部")
+        hi_lbl.setStyleSheet(
+            f"color: {T.TEXT_SECONDARY}; font-size: {T.FONT_SM}px; font-weight: 700; background: transparent;"
+        )
+        lay.addWidget(hi_lbl)
+
+        self._split_hi_hue = _SliderRow("色相", 0, 360, 0)
+        self._split_hi_sat = _SliderRow("飽和度", 0, 100, 0)
+        self._split_hi_hue.value_changed.connect(lambda v: self._update("split_highlights_hue", v))
+        self._split_hi_sat.value_changed.connect(lambda v: self._update("split_highlights_sat", v))
+        lay.addWidget(self._split_hi_hue)
+        lay.addWidget(self._split_hi_sat)
+
+        sh_lbl = QLabel("暗部")
+        sh_lbl.setStyleSheet(
+            f"color: {T.TEXT_SECONDARY}; font-size: {T.FONT_SM}px; font-weight: 700; background: transparent;"
+        )
+        lay.addWidget(sh_lbl)
+
+        self._split_sh_hue = _SliderRow("色相", 0, 360, 0)
+        self._split_sh_sat = _SliderRow("飽和度", 0, 100, 0)
+        self._split_sh_hue.value_changed.connect(lambda v: self._update("split_shadows_hue", v))
+        self._split_sh_sat.value_changed.connect(lambda v: self._update("split_shadows_sat", v))
+        lay.addWidget(self._split_sh_hue)
+        lay.addWidget(self._split_sh_sat)
+
+        self._split_balance = _SliderRow("平衡", -100, 100, 0)
+        self._split_balance.value_changed.connect(lambda v: self._update("split_balance", v))
+        lay.addWidget(self._split_balance)
+
+    # ── 效果 ─────────────────────────────────────────────────────────────────────
+
+    def _build_effects_section(self, lay: QVBoxLayout) -> None:
+        anchor = _section_label("效果")
+        self._section_anchors["effects"] = anchor
+        lay.addWidget(anchor)
+
+        vig_lbl = QLabel("暗角")
+        vig_lbl.setStyleSheet(
+            f"color: {T.TEXT_SECONDARY}; font-size: {T.FONT_SM}px; font-weight: 700; background: transparent;"
+        )
+        lay.addWidget(vig_lbl)
+
+        self._vignette_amount   = _SliderRow("數量",  -100, 100, 0)
+        self._vignette_midpoint = _SliderRow("中點",  0,   100, 50)
+        self._vignette_feather  = _SliderRow("羽化",  0,   100, 50)
+        self._vignette_amount.value_changed.connect(lambda v: self._update("vignette_amount", v))
+        self._vignette_midpoint.value_changed.connect(lambda v: self._update("vignette_midpoint", v))
+        self._vignette_feather.value_changed.connect(lambda v: self._update("vignette_feather", v))
+        lay.addWidget(self._vignette_amount)
+        lay.addWidget(self._vignette_midpoint)
+        lay.addWidget(self._vignette_feather)
+
+        grain_lbl = QLabel("顆粒")
+        grain_lbl.setStyleSheet(
+            f"color: {T.TEXT_SECONDARY}; font-size: {T.FONT_SM}px; font-weight: 700; background: transparent;"
+        )
+        lay.addWidget(grain_lbl)
+
+        self._grain_amount    = _SliderRow("數量",  0, 100, 0)
+        self._grain_size      = _SliderRow("大小",  0, 100, 25)
+        self._grain_roughness = _SliderRow("粗糙度", 0, 100, 50)
+        self._grain_amount.value_changed.connect(lambda v: self._update("grain_amount", v))
+        self._grain_size.value_changed.connect(lambda v: self._update("grain_size", v))
+        self._grain_roughness.value_changed.connect(lambda v: self._update("grain_roughness", v))
+        lay.addWidget(self._grain_amount)
+        lay.addWidget(self._grain_size)
+        lay.addWidget(self._grain_roughness)
 
     # ── Film Simulation ───────────────────────────────────────────────────────
 
@@ -535,6 +673,47 @@ class ColorGradePanel(QWidget):
         )
         self.grade_changed.emit(self._settings)
 
+    # ── 幾何變換 ──────────────────────────────────────────────────────────────
+
+    def _build_transform_section(self, lay: QVBoxLayout) -> None:
+        anchor = _section_label("幾何")
+        self._section_anchors["transform"] = anchor
+        lay.addWidget(anchor)
+
+        # 旋轉滑桿：-450 ~ +450，顯示時除以 10 → -45.0 ~ +45.0 度
+        self._rotation_row = _SliderRow("旋轉", -450, 450, 0)
+        self._rotation_row.value_changed.connect(
+            lambda v: self._update("rotation", v / 10.0)
+        )
+        lay.addWidget(self._rotation_row)
+
+        # 翻轉按鈕列
+        flip_row = QWidget()
+        flip_lay = QHBoxLayout(flip_row)
+        flip_lay.setContentsMargins(0, 0, 0, 0)
+        flip_lay.setSpacing(8)
+
+        self._flip_h_btn = QPushButton("水平翻轉")
+        self._flip_h_btn.setObjectName("ChipBtn")
+        self._flip_h_btn.setCheckable(True)
+        self._flip_h_btn.setFixedHeight(26)
+        self._flip_h_btn.toggled.connect(
+            lambda checked: self._update("flip_h", checked)
+        )
+
+        self._flip_v_btn = QPushButton("垂直翻轉")
+        self._flip_v_btn.setObjectName("ChipBtn")
+        self._flip_v_btn.setCheckable(True)
+        self._flip_v_btn.setFixedHeight(26)
+        self._flip_v_btn.toggled.connect(
+            lambda checked: self._update("flip_v", checked)
+        )
+
+        flip_lay.addWidget(self._flip_h_btn)
+        flip_lay.addWidget(self._flip_v_btn)
+        flip_lay.addStretch()
+        lay.addWidget(flip_row)
+
     # ── 曝光 ─────────────────────────────────────────────────────────────────
 
     def _build_exposure_section(self, lay: QVBoxLayout) -> None:
@@ -709,6 +888,41 @@ class ColorGradePanel(QWidget):
             "RGB": s.curve_rgb, "R": s.curve_r, "G": s.curve_g, "B": s.curve_b,
         }
         self._curve_widget.set_curve(curve_map.get(ch, s.curve_rgb))
+
+        # 幾何變換
+        self._rotation_row.set_value(round(s.rotation * 10))
+        self._flip_h_btn.blockSignals(True)
+        self._flip_v_btn.blockSignals(True)
+        self._flip_h_btn.setChecked(s.flip_h)
+        self._flip_v_btn.setChecked(s.flip_v)
+        self._flip_h_btn.blockSignals(False)
+        self._flip_v_btn.blockSignals(False)
+
+        # 臨場感
+        for field, row in self._presence_rows.items():
+            row.set_value(getattr(s, field))
+
+        # 黑白
+        self._bw_toggle.blockSignals(True)
+        self._bw_toggle.setChecked(s.treatment == "bw")
+        self._bw_toggle.blockSignals(False)
+        for i, row in enumerate(self._bw_rows):
+            row.set_value(s.bw_mix[i])
+
+        # 分割色調
+        self._split_hi_hue.set_value(s.split_highlights_hue)
+        self._split_hi_sat.set_value(s.split_highlights_sat)
+        self._split_sh_hue.set_value(s.split_shadows_hue)
+        self._split_sh_sat.set_value(s.split_shadows_sat)
+        self._split_balance.set_value(s.split_balance)
+
+        # 效果
+        self._vignette_amount.set_value(s.vignette_amount)
+        self._vignette_midpoint.set_value(s.vignette_midpoint)
+        self._vignette_feather.set_value(s.vignette_feather)
+        self._grain_amount.set_value(s.grain_amount)
+        self._grain_size.set_value(s.grain_size)
+        self._grain_roughness.set_value(s.grain_roughness)
 
     # ── 樣式 ─────────────────────────────────────────────────────────────────
 

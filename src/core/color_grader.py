@@ -318,8 +318,233 @@ def _apply_noise_reduction(img: Image.Image, amount: int) -> Image.Image:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Presence：Clarity / Texture / Dehaze / Vibrance / Saturation
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_clarity_texture(img: Image.Image, clarity: int, texture: int) -> Image.Image:
+    """Clarity = large-radius unsharp mask (midtone contrast).
+    Texture = medium-radius (fine detail)."""
+    result = img
+    if clarity != 0:
+        radius = 60
+        amount = clarity / 100.0
+        blurred = img.filter(ImageFilter.GaussianBlur(radius))
+        result = Image.blend(blurred, img, 1.0 + abs(amount))
+        if clarity < 0:
+            result = Image.blend(img, blurred, abs(amount) * 0.5)
+    if texture != 0:
+        radius = 10
+        amount = texture / 100.0
+        blurred = result.filter(ImageFilter.GaussianBlur(radius))
+        if texture > 0:
+            result = Image.blend(blurred, result, 1.0 + amount * 0.5)
+        else:
+            result = Image.blend(result, blurred, abs(amount) * 0.3)
+    return result
+
+
+def _apply_dehaze(img: Image.Image, amount: int) -> Image.Image:
+    """Dehaze: positive removes haze (boost contrast+sat), negative adds haze."""
+    if amount == 0:
+        return img
+    import numpy as np
+    arr = np.array(img, dtype=np.float32)
+    t = amount / 100.0
+    if amount > 0:
+        # Remove haze: increase contrast and saturation
+        arr = arr * (1 + t * 0.4) - 255 * t * 0.1
+    else:
+        # Add haze: flatten and desaturate
+        arr = arr * (1 + t * 0.3) + 255 * (-t) * 0.2
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+def _apply_vibrance_saturation(img: Image.Image, vibrance: int, saturation: int) -> Image.Image:
+    """Vibrance = smart saturation (protects already-saturated and skin tones).
+    Saturation = global HSV S multiplier."""
+    if vibrance == 0 and saturation == 0:
+        return img
+    import numpy as np
+    arr = np.array(img, dtype=np.float32) / 255.0
+    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+    maxc = np.maximum(np.maximum(r, g), b)
+    minc = np.minimum(np.minimum(r, g), b)
+    s = np.where(maxc == 0, 0.0, (maxc - minc) / maxc)
+
+    if saturation != 0:
+        sat_factor = 1.0 + saturation / 100.0
+        s = np.clip(s * sat_factor, 0.0, 1.0)
+
+    if vibrance != 0:
+        vib = vibrance / 100.0
+        weight = (1.0 - s) * (1.0 + vib * 0.7)
+        weight = np.clip(weight, 0.0, 2.0)
+        s = np.clip(s + vib * weight * 0.3, 0.0, 1.0)
+
+    scale = np.where(
+        maxc - minc == 0,
+        1.0,
+        s * maxc / np.maximum(maxc - minc, 1e-6),
+    )
+    mid = maxc - s * maxc
+    r2 = np.where(r == maxc, maxc, np.where(r == minc, mid, mid + (r - minc) * scale))
+    g2 = np.where(g == maxc, maxc, np.where(g == minc, mid, mid + (g - minc) * scale))
+    b2 = np.where(b == maxc, maxc, np.where(b == minc, mid, mid + (b - minc) * scale))
+    arr2 = np.stack([r2, g2, b2], axis=2)
+    arr2 = np.clip(arr2 * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(arr2, "RGB")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Treatment：B&W 混合
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_bw(img: Image.Image, bw_mix: tuple) -> Image.Image:
+    """Convert to B&W with per-hue luminance mix (like LR B&W panel)."""
+    import numpy as np
+    arr = np.array(img, dtype=np.float32) / 255.0
+    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+    maxc = np.maximum(np.maximum(r, g), b)
+    minc = np.minimum(np.minimum(r, g), b)
+    delta = maxc - minc
+    h = np.zeros_like(r)
+    mask = delta > 0
+    h[mask & (maxc == r)] = (60 * ((g - b) / delta % 6))[mask & (maxc == r)]
+    h[mask & (maxc == g)] = (60 * ((b - r) / delta + 2))[mask & (maxc == g)]
+    h[mask & (maxc == b)] = (60 * ((r - g) / delta + 4))[mask & (maxc == b)]
+    h = h % 360
+    centers = [0, 30, 60, 120, 180, 240, 280, 320]
+    weights = np.zeros_like(r)
+    for i, center in enumerate(centers):
+        diff = np.minimum(np.abs(h - center), 360 - np.abs(h - center))
+        w = np.maximum(0, 1.0 - diff / 40.0)
+        weights += w * (bw_mix[i] / 100.0)
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    lum = np.clip(lum + weights * 0.2, 0, 1)
+    lum8 = (lum * 255).astype(np.uint8)
+    out = np.stack([lum8, lum8, lum8], axis=2)
+    return Image.fromarray(out, "RGB")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Split Toning
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_split_tone(
+    img: Image.Image,
+    h_hue: int, h_sat: int,
+    s_hue: int, s_sat: int,
+    balance: int,
+) -> Image.Image:
+    """Split toning: different color casts for highlights vs shadows."""
+    if h_sat == 0 and s_sat == 0:
+        return img
+    import numpy as np
+    arr = np.array(img, dtype=np.float32) / 255.0
+    lum = 0.2126 * arr[:, :, 0] + 0.7152 * arr[:, :, 1] + 0.0722 * arr[:, :, 2]
+    bal = balance / 100.0
+    h_mask = np.clip((lum - 0.5 + bal * 0.2) * 2, 0, 1)
+    s_mask = np.clip((0.5 - lum + bal * 0.2) * 2, 0, 1)
+
+    def hue_to_rgb(hue_deg: int) -> tuple:
+        hf = (hue_deg % 360) / 60.0
+        x = 1 - abs(hf % 2 - 1)
+        if hf < 1:
+            return (1.0, x, 0.0)
+        elif hf < 2:
+            return (x, 1.0, 0.0)
+        elif hf < 3:
+            return (0.0, 1.0, x)
+        elif hf < 4:
+            return (0.0, x, 1.0)
+        elif hf < 5:
+            return (x, 0.0, 1.0)
+        else:
+            return (1.0, 0.0, x)
+
+    result = arr.copy()
+    if h_sat > 0:
+        hr, hg, hb = hue_to_rgb(h_hue)
+        strength = h_sat / 100.0 * 0.3
+        result[:, :, 0] += h_mask * (hr - lum) * strength
+        result[:, :, 1] += h_mask * (hg - lum) * strength
+        result[:, :, 2] += h_mask * (hb - lum) * strength
+    if s_sat > 0:
+        sr, sg, sb = hue_to_rgb(s_hue)
+        strength = s_sat / 100.0 * 0.3
+        result[:, :, 0] += s_mask * (sr - lum) * strength
+        result[:, :, 1] += s_mask * (sg - lum) * strength
+        result[:, :, 2] += s_mask * (sb - lum) * strength
+    result = np.clip(result * 255, 0, 255).astype(np.uint8)
+    return Image.fromarray(result, "RGB")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Effects：Vignette / Grain
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_vignette(img: Image.Image, amount: int, midpoint: int, feather: int) -> Image.Image:
+    """Post-crop vignette. Negative amount = darken edges (classic vignette)."""
+    if amount == 0:
+        return img
+    import numpy as np
+    arr = np.array(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    cx, cy = w / 2, h / 2
+    Y, X = np.ogrid[:h, :w]
+    dist = np.sqrt(((X - cx) / cx) ** 2 + ((Y - cy) / cy) ** 2)
+    inner = midpoint / 100.0
+    outer = inner + feather / 100.0
+    mask = np.clip((dist - inner) / max(outer - inner, 0.01), 0, 1)
+    factor = 1.0 + (amount / 100.0) * mask * (-0.9)
+    arr = np.clip(arr * factor[:, :, np.newaxis], 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+def _apply_grain(img: Image.Image, amount: int, size: int, roughness: int) -> Image.Image:
+    """Film grain simulation."""
+    if amount == 0:
+        return img
+    import numpy as np
+    arr = np.array(img, dtype=np.float32)
+    h, w = arr.shape[:2]
+    scale = max(1, int(size / 10))
+    small_h, small_w = max(1, h // scale), max(1, w // scale)
+    rng = np.random.default_rng(42)
+    noise_small = rng.standard_normal((small_h, small_w))
+    noise_img = Image.fromarray(
+        ((noise_small + 3) / 6 * 255).clip(0, 255).astype(np.uint8), "L"
+    )
+    noise_full = np.array(noise_img.resize((w, h), Image.BILINEAR), dtype=np.float32) / 255.0
+    noise_full = (noise_full - 0.5) * 2
+    lum = (arr[:, :, 0] * 0.2126 + arr[:, :, 1] * 0.7152 + arr[:, :, 2] * 0.0722) / 255.0
+    lum_weight = 1.0 - abs(lum - 0.5) * roughness / 100.0
+    intensity = amount / 100.0 * 30
+    noise_scaled = noise_full * intensity * lum_weight
+    arr = np.clip(arr + noise_scaled[:, :, np.newaxis], 0, 255).astype(np.uint8)
+    return Image.fromarray(arr, "RGB")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 主入口
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _apply_transform(img: Image.Image, rotation: float, flip_h: bool, flip_v: bool) -> Image.Image:
+    """
+    套用幾何變換：翻轉 → 旋轉（expand=True 保留完整畫面）。
+    傳入 RGB PIL.Image，回傳新的 RGB PIL.Image。
+    """
+    from PIL import ImageOps
+    result = img
+    if flip_h:
+        result = ImageOps.mirror(result)
+    if flip_v:
+        result = ImageOps.flip(result)
+    if rotation != 0.0:
+        result = result.rotate(-rotation, expand=True, resample=Image.BICUBIC)
+    return result
+
 
 def apply(img: Image.Image, settings: GradeSettings) -> Image.Image:
     """
@@ -340,6 +565,10 @@ def apply(img: Image.Image, settings: GradeSettings) -> Image.Image:
         return img.copy()
 
     result = img.convert("RGB")
+
+    # 0. 幾何變換（旋轉 / 翻轉）
+    if settings.rotation != 0.0 or settings.flip_h or settings.flip_v:
+        result = _apply_transform(result, settings.rotation, settings.flip_h, settings.flip_v)
 
     # 1. 白平衡
     if settings.wb_temperature != 5500 or settings.wb_tint != 0:
@@ -393,6 +622,31 @@ def apply(img: Image.Image, settings: GradeSettings) -> Image.Image:
             settings.hsl_luminance,
         )
 
+    # 6b. Clarity / Texture
+    if settings.clarity != 0 or settings.texture != 0:
+        result = _apply_clarity_texture(result, settings.clarity, settings.texture)
+
+    # 6c. Dehaze
+    if settings.dehaze != 0:
+        result = _apply_dehaze(result, settings.dehaze)
+
+    # 6d. Vibrance / Saturation
+    if settings.vibrance != 0 or settings.saturation != 0:
+        result = _apply_vibrance_saturation(result, settings.vibrance, settings.saturation)
+
+    # 6e. B&W treatment
+    if settings.treatment == "bw":
+        result = _apply_bw(result, settings.bw_mix)
+
+    # 6f. Split toning
+    if settings.split_highlights_sat != 0 or settings.split_shadows_sat != 0:
+        result = _apply_split_tone(
+            result,
+            settings.split_highlights_hue, settings.split_highlights_sat,
+            settings.split_shadows_hue, settings.split_shadows_sat,
+            settings.split_balance,
+        )
+
     # 7. 降噪
     if settings.noise_reduction > 0:
         result = _apply_noise_reduction(result, settings.noise_reduction)
@@ -400,6 +654,20 @@ def apply(img: Image.Image, settings: GradeSettings) -> Image.Image:
     # 8. 銳化
     if settings.sharpening > 0:
         result = _apply_sharpening(result, settings.sharpening, settings.detail_mask)
+
+    # 8b. Vignette
+    if settings.vignette_amount != 0:
+        result = _apply_vignette(
+            result, settings.vignette_amount,
+            settings.vignette_midpoint, settings.vignette_feather,
+        )
+
+    # 8c. Grain
+    if settings.grain_amount > 0:
+        result = _apply_grain(
+            result, settings.grain_amount,
+            settings.grain_size, settings.grain_roughness,
+        )
 
     # 9. LUT
     if settings.lut_path and settings.lut_opacity > 0:

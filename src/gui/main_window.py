@@ -220,6 +220,8 @@ class MainWindow(QMainWindow):
         self._synced_indices:  set[int]                 = set()
         self._photo_settings:  dict[int, BorderSettings] = {}
         self._grade_settings:  dict[int, GradeSettings]  = {}  # 每張照片調色設定
+        self._grade_history:   dict[int, list[GradeSettings]] = {}  # undo 堆疊（每張照片）
+        self._grade_future:    dict[int, list[GradeSettings]] = {}  # redo 堆疊（每張照片）
         self._sync_all = False
         self._current_step = 1   # 1=調色, 2=加框
         self._before_mode  = False   # Before/After 切換
@@ -602,6 +604,10 @@ class MainWindow(QMainWindow):
         if idx in self._grade_settings:
             self._grade_panel.restore_settings(self._grade_settings[idx])
 
+        # 設定 Before/After 比較的原始圖（未調色）
+        from src.gui.preview_panel import _pil_to_pixmap as _p2px
+        self._preview.set_before(_p2px(p.image))
+
         # Step 1 預覽（顯示調色結果 or 原圖）
         if idx in self._graded_cache:
             self._preview.show_image(self._graded_cache[idx])
@@ -684,9 +690,17 @@ class MainWindow(QMainWindow):
         """調色設定變更：保持舊預覽，用 debounce 延遲觸發處理。"""
         if self._cur_idx < 0:
             return
-        self._grade_settings[self._cur_idx] = grade
-        self._graded_cache.pop(self._cur_idx, None)
-        self._processed_cache.pop(self._cur_idx, None)
+        idx = self._cur_idx
+        # 推入 undo 歷史（限 50 項），清空 redo
+        prev = self._grade_settings.get(idx, GradeSettings())
+        history = self._grade_history.setdefault(idx, [])
+        history.append(prev)
+        if len(history) > 50:
+            history.pop(0)
+        self._grade_future[idx] = []
+        self._grade_settings[idx] = grade
+        self._graded_cache.pop(idx, None)
+        self._processed_cache.pop(idx, None)
         # 用 debounce 延遲觸發，拖動時不會每幀都重算
         self._grade_debounce.start()
 
@@ -838,6 +852,50 @@ class MainWindow(QMainWindow):
                 self._preview.set_strip_current(self._cur_idx)
                 self._preview2.set_strip_current(self._cur_idx)
 
+    # ── Grade Undo / Redo ─────────────────────────────────────────────────────
+
+    def _undo_grade(self) -> None:
+        """復原上一個調色操作。"""
+        if self._cur_idx < 0:
+            return
+        idx = self._cur_idx
+        history = self._grade_history.get(idx, [])
+        if not history:
+            return
+        # 把當前狀態推入 redo
+        current = self._grade_settings.get(idx, GradeSettings())
+        self._grade_future.setdefault(idx, []).append(current)
+        # 從 history 取出上一個狀態
+        grade = history.pop()
+        self._grade_settings[idx] = grade
+        self._graded_cache.pop(idx, None)
+        self._processed_cache.pop(idx, None)
+        self._grade_panel.restore_settings(grade)
+        self.grade_changed_from_undo(grade)
+
+    def _redo_grade(self) -> None:
+        """重做已復原的調色操作。"""
+        if self._cur_idx < 0:
+            return
+        idx = self._cur_idx
+        future = self._grade_future.get(idx, [])
+        if not future:
+            return
+        # 把當前狀態推回 history
+        current = self._grade_settings.get(idx, GradeSettings())
+        self._grade_history.setdefault(idx, []).append(current)
+        # 取出 redo 狀態
+        grade = future.pop()
+        self._grade_settings[idx] = grade
+        self._graded_cache.pop(idx, None)
+        self._processed_cache.pop(idx, None)
+        self._grade_panel.restore_settings(grade)
+        self.grade_changed_from_undo(grade)
+
+    def grade_changed_from_undo(self, grade: GradeSettings) -> None:
+        """Undo/Redo 後觸發重新渲染（不再推入歷史）。"""
+        self._grade_debounce.start()
+
     # ── Keyboard shortcuts ────────────────────────────────────────────────────
 
     def keyPressEvent(self, e) -> None:
@@ -863,6 +921,26 @@ class MainWindow(QMainWindow):
         if key == Qt.Key.Key_Delete and not mods:
             if self._cur_idx >= 0:
                 self._delete_photo(self._cur_idx)
+            return
+
+        # Ctrl+Z — 復原調色
+        if key == Qt.Key.Key_Z and (mods & Qt.KeyboardModifier.ControlModifier) \
+                and not (mods & Qt.KeyboardModifier.ShiftModifier):
+            self._undo_grade()
+            return
+
+        # Ctrl+Shift+Z / Ctrl+Y — 重做調色
+        if (key == Qt.Key.Key_Z and (mods & Qt.KeyboardModifier.ControlModifier)
+                and (mods & Qt.KeyboardModifier.ShiftModifier)):
+            self._redo_grade()
+            return
+        if key == Qt.Key.Key_Y and (mods & Qt.KeyboardModifier.ControlModifier):
+            self._redo_grade()
+            return
+
+        # Ctrl+\ — 切換 Before/After 比較模式
+        if key == Qt.Key.Key_Backslash and (mods & Qt.KeyboardModifier.ControlModifier):
+            self._preview.toggle_compare()
             return
 
         # Ctrl+E — 匯出

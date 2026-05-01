@@ -1143,6 +1143,94 @@ class _ZoomControl(QWidget):
         p.end()
 
 
+# ── Before/After Compare Overlay ─────────────────────────────────────────────
+
+class _CompareOverlay(QWidget):
+    """半屏 Before/After 比較覆蓋層。
+    左半：before 圖（原圖）；右半：after 圖（當前 _photo_lbl）。
+    中間繪製金色分隔線，左右上角各有文字標籤。
+    """
+
+    def __init__(self, parent: QWidget, photo_lbl: QLabel):
+        super().__init__(parent)
+        self._photo_lbl = photo_lbl
+        self._before: QPixmap | None = None
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        _tm().theme_changed.connect(lambda _: self.update())
+
+    def set_before(self, pix: QPixmap) -> None:
+        self._before = pix
+        self.update()
+
+    def paintEvent(self, _) -> None:
+        after_pix = self._photo_lbl.pixmap()
+        if after_pix is None or after_pix.isNull():
+            return
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+
+        W, H = self.width(), self.height()
+        mid = W // 2
+
+        # ── 計算照片顯示區域（KeepAspectRatio AlignCenter，同 _photo_lbl）──
+        pw, ph = after_pix.width(), after_pix.height()
+        off_x = (W - pw) // 2
+        off_y = (H - ph) // 2
+        photo_rect = QRect(off_x, off_y, pw, ph)
+
+        # 左半：before 圖
+        if self._before and not self._before.isNull():
+            # Scale before to same size as the displayed after pixmap
+            before_scaled = self._before.scaled(
+                pw, ph,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            bw = before_scaled.width()
+            bh = before_scaled.height()
+            bx = off_x + (pw - bw) // 2
+            by = off_y + (ph - bh) // 2
+            p.setClipRect(QRect(0, 0, mid, H))
+            p.drawPixmap(bx, by, before_scaled)
+            p.setClipping(False)
+
+        # 右半：after 圖（來自 _photo_lbl，已渲染好）
+        p.setClipRect(QRect(mid, 0, W - mid, H))
+        p.drawPixmap(off_x, off_y, after_pix)
+        p.setClipping(False)
+
+        # ── 金色分隔線 ──
+        gold_col = QColor(T.GOLD)
+        p.setPen(QPen(gold_col, 2, Qt.PenStyle.SolidLine))
+        p.drawLine(mid, 0, mid, H)
+
+        # ── 文字標籤 ──
+        label_font = T.ui_font(T.FONT_SM, QFont.Weight.Bold)
+        p.setFont(label_font)
+
+        def _draw_badge(text: str, x: int, align_right: bool) -> None:
+            fm = QFontMetrics(label_font)
+            tw = fm.horizontalAdvance(text)
+            pad_x, pad_y = 8, 4
+            bw = tw + pad_x * 2
+            bh = fm.height() + pad_y * 2
+            by = 16
+            bx = x - bw - 8 if align_right else x + 8
+            bg = QColor(0, 0, 0, 160)
+            p.setBrush(QBrush(bg))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(QRectF(bx, by, bw, bh), 4, 4)
+            p.setPen(QPen(gold_col if align_right else QColor("#ffffff")))
+            p.drawText(QRect(bx + pad_x, by + pad_y, tw, fm.height()), 0, text)
+
+        _draw_badge("BEFORE", mid, True)
+        _draw_badge("AFTER",  mid, False)
+
+        p.end()
+
+
 # ── Preview Panel ─────────────────────────────────────────────────────────────
 
 class PreviewPanel(QWidget):
@@ -1222,6 +1310,16 @@ class PreviewPanel(QWidget):
         self._template: TemplateStyle = TemplateStyle.CLASSIC
         self._zoom: float = 1.0
         self._split_zoom: float = 1.0   # 最終輸出縮放，移動模式滾輪控制
+
+        # Before/After 比較模式
+        self._before_image: QPixmap | None = None
+        self._compare_mode: bool = False
+        # 比較覆蓋層（在 canvas 最上層繪製）
+        self._compare_overlay = _CompareOverlay(self._canvas, self._photo_lbl)
+        self._compare_overlay.hide()
+
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
         _tm().theme_changed.connect(self._on_theme)
 
     # ── 代理 ImageStrip 的同步 / 刪除信號給 MainWindow ────────────────────────
@@ -1362,6 +1460,34 @@ class PreviewPanel(QWidget):
 
 
 
+    # ── Before/After 比較 ────────────────────────────────────────────────────
+
+    def set_before(self, pixmap: "QPixmap") -> None:
+        """儲存未調色的原始圖，供比較模式使用。"""
+        self._before_image = pixmap
+        self._compare_overlay.set_before(pixmap)
+
+    def toggle_compare(self) -> None:
+        """切換 Before/After 分割比較模式。"""
+        self._compare_mode = not self._compare_mode
+        if self._compare_mode and self._has_image:
+            cw = self._canvas.width()
+            ch = self._canvas.height()
+            self._compare_overlay.setGeometry(0, 0, cw, ch)
+            self._compare_overlay.show()
+            self._compare_overlay.raise_()
+            self._zoom_ctrl.raise_()
+        else:
+            self._compare_overlay.hide()
+
+    def keyPressEvent(self, e) -> None:
+        """反斜線（\\）鍵切換比較模式。"""
+        if e.key() == Qt.Key.Key_Backslash:
+            self.toggle_compare()
+            e.accept()
+        else:
+            super().keyPressEvent(e)
+
     def current_pixmap(self) -> "QPixmap | None":
         return self._pixmap
 
@@ -1435,6 +1561,9 @@ class PreviewPanel(QWidget):
         self._safe_overlay.setGeometry(0, 0, cw, ch)
         self._split_drag.setGeometry(0, 0, cw, ch)
         self._split_drag.raise_()
+        self._compare_overlay.setGeometry(0, 0, cw, ch)
+        if self._compare_mode:
+            self._compare_overlay.raise_()
         self._spinner.move(cw - 36, 8)
         self._sz_toggle.move(8, 8)
         # 移動按鈕：safe zone 按鈕下方；若無 safe zone 按鈕則同位置
@@ -1468,6 +1597,10 @@ class PreviewPanel(QWidget):
             Qt.TransformationMode.SmoothTransformation,
         ))
         self._safe_overlay.update()
+        if self._compare_mode:
+            self._compare_overlay.setGeometry(0, 0, cw, ch)
+            self._compare_overlay.raise_()
+            self._compare_overlay.update()
 
 
 def _pil_to_pixmap(img: Image.Image) -> QPixmap:

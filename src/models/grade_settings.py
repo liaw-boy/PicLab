@@ -66,6 +66,32 @@ class GradeSettings:
     whites:    int = 0    # -100 ~ +100
     blacks:    int = 0    # -100 ~ +100
 
+    # ── Presence ──────────────────────────────────────────────────────────────
+    texture:    int = 0    # -100 ~ +100
+    clarity:    int = 0    # -100 ~ +100
+    dehaze:     int = 0    # -100 ~ +100
+    vibrance:   int = 0    # -100 ~ +100
+    saturation: int = 0    # -100 ~ +100
+
+    # ── Treatment ─────────────────────────────────────────────────────────────
+    treatment:  str = "color"           # "color" | "bw"
+    bw_mix: tuple[int, ...] = (0,) * 8  # per-hue luminance contribution
+
+    # ── Effects ───────────────────────────────────────────────────────────────
+    vignette_amount:   int = 0    # -100 ~ +100 (negative=darken)
+    vignette_midpoint: int = 50   # 0 ~ 100
+    vignette_feather:  int = 50   # 0 ~ 100
+    grain_amount:      int = 0    # 0 ~ 100
+    grain_size:        int = 25   # 0 ~ 100
+    grain_roughness:   int = 50   # 0 ~ 100
+
+    # ── Split Toning ──────────────────────────────────────────────────────────
+    split_highlights_hue: int = 0   # 0 ~ 360
+    split_highlights_sat: int = 0   # 0 ~ 100
+    split_shadows_hue:    int = 0   # 0 ~ 360
+    split_shadows_sat:    int = 0   # 0 ~ 100
+    split_balance:        int = 0   # -100 ~ +100
+
     # ── HSL（每個色相 8 個區間）──────────────────────────────────────────────
     # 順序：紅、橙、黃、綠、青、藍、紫、洋紅
     hsl_hue:        tuple[int, ...] = (0,) * 8
@@ -80,6 +106,11 @@ class GradeSettings:
     # ── LUT ───────────────────────────────────────────────────────────────────
     lut_path:    Optional[str] = None   # .cube 檔絕對路徑，None = 不套用
     lut_opacity: int           = 100   # 0-100
+
+    # ── 幾何變換 ──────────────────────────────────────────────────────────────
+    rotation: float = 0.0   # 旋轉角度，-45.0 ~ +45.0 度
+    flip_h:   bool  = False  # 水平翻轉
+    flip_v:   bool  = False  # 垂直翻轉
 
     def is_identity(self) -> bool:
         """若所有值皆為預設，則不需要調色處理。"""
@@ -96,10 +127,24 @@ class GradeSettings:
             and self.shadows == 0
             and self.whites == 0
             and self.blacks == 0
+            and self.texture == 0
+            and self.clarity == 0
+            and self.dehaze == 0
+            and self.vibrance == 0
+            and self.saturation == 0
+            and self.treatment == "color"
+            and all(v == 0 for v in self.bw_mix)
+            and self.vignette_amount == 0
+            and self.grain_amount == 0
+            and self.split_highlights_sat == 0
+            and self.split_shadows_sat == 0
             and all(v == 0 for v in self.hsl_hue)
             and all(v == 0 for v in self.hsl_saturation)
             and all(v == 0 for v in self.hsl_luminance)
             and self.sharpening == 0
             and self.noise_reduction == 0
             and self.lut_path is None
+            and self.rotation == 0.0
+            and not self.flip_h
+            and not self.flip_v
         )
