@@ -182,8 +182,8 @@ R_BUTTON, R_CARD, R_INPUT, R_CHIP, R_PILL = 10, 14, 8, 8, 20
 ANIM_FAST, ANIM_NORMAL, ANIM_SLOW = 130, 200, 300
 
 # ── Typography ───────────────────────────────────────────────────────────────
-FONT_XS, FONT_SM, FONT_BASE, FONT_MD = 12, 13, 14, 15
-FONT_LG, FONT_XL, FONT_2XL = 17, 20, 24
+FONT_XS, FONT_SM, FONT_BASE, FONT_MD = 13, 15, 16, 17
+FONT_LG, FONT_XL, FONT_2XL = 19, 22, 27
 
 # ── UI Font family (best available CJK-compatible sans-serif) ─────────────────
 
@@ -191,11 +191,14 @@ def _detect_ui_font() -> str:
     from PyQt6.QtGui import QFontDatabase
     available = set(QFontDatabase.families())
     for family in [
-        "Microsoft JhengHei",   # Windows 繁中
-        "Microsoft YaHei",      # Windows 簡中
-        "Noto Sans TC",         # Google 繁中
+        "Noto Sans CJK TC",     # Linux 繁中（最優先，渲染清晰）
         "PingFang TC",          # macOS 繁中
-        "Segoe UI",             # Windows 回退
+        "Microsoft JhengHei",   # Windows 繁中
+        "Noto Sans TC",         # 備選繁中
+        "Microsoft YaHei",      # Windows 簡中
+        "Noto Sans CJK SC",     # Linux 簡中備選
+        "Ubuntu Sans",          # Linux 通用
+        "Segoe UI",             # Windows 通用
     ]:
         if family in available:
             return family

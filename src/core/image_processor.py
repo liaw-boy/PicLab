@@ -365,13 +365,16 @@ def _apply_rounded(img: Image.Image, radius: int) -> Image.Image:
 
 def _draw_rounded_exif(canvas, photo, settings, cw, ch, pad, strip) -> None:
     """同 CLASSIC 雙欄 EXIF 條，應用於 ROUNDED 模板。"""
-    # Reuse the same two-column layout logic
     from src.core.aspect_ratio import CanvasGeometry
-    geo_stub = type('G', (), {
-        'canvas_w': cw, 'exif_strip_h': strip, 'exif_strip_y': ch - strip,
-        'img_y': ch - strip, 'img_h': 0,
-    })()
-    _draw_classic_exif(canvas, photo, settings, geo_stub)
+    geo = CanvasGeometry(
+        canvas_w=cw, canvas_h=ch,
+        photo_x=pad, photo_y=pad,
+        photo_w=max(1, cw - 2 * pad), photo_h=max(1, ch - pad - strip),
+        exif_strip_y=ch - strip, exif_strip_h=strip,
+        img_x=pad, img_y=pad,
+        img_w=max(1, cw - 2 * pad), img_h=max(1, ch - pad - strip),
+    )
+    _draw_classic_exif(canvas, photo, settings, geo)
 
 
 # ── Template 3: SPLIT ─────────────────────────────────────────────────────────

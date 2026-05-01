@@ -15,8 +15,10 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QCheckBox, QSlider, QFileDialog,
     QScrollArea, QSizePolicy, QFrame, QPushButton,
+    QComboBox, QLineEdit, QInputDialog, QColorDialog,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QColor
 
 import src.gui.theme as T
 
@@ -195,6 +197,9 @@ class SettingsPanel(QScrollArea):
         # ── 區段建立 ──
         self._anchors: dict[str, _AnchorWidget] = {}
 
+        self._add_anchor(root, "presets")
+        root.addWidget(self._build_presets_section())
+
         self._add_anchor(root, "ratio")
         root.addWidget(self._build_ratio_section())
 
@@ -241,6 +246,102 @@ class SettingsPanel(QScrollArea):
             {T.scrollbar_qss()}
         """)
         self._body.setStyleSheet(f"background: {T.SIDEBAR};")
+
+    # ── 區段：設定預設組 ──────────────────────────────────────────────────────
+
+    def _build_presets_section(self) -> QWidget:
+        from src.gui import preset_manager as PM
+        card = _Card()
+        hdr_row = QHBoxLayout()
+        hdr_row.addWidget(_SectionHeader("設定預設組"))
+        hdr_row.addStretch()
+        card.add_layout(hdr_row)
+
+        combo_row = QHBoxLayout()
+        combo_row.setSpacing(6)
+        self._preset_combo = QComboBox()
+        self._preset_combo.setPlaceholderText("選擇預設…")
+        self._preset_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._preset_combo.setFixedHeight(32)
+        self._preset_combo.setStyleSheet(self._combo_qss())
+        _tm().theme_changed.connect(lambda _: self._preset_combo.setStyleSheet(self._combo_qss()))
+        combo_row.addWidget(self._preset_combo)
+
+        apply_btn = GhostButton("套用", font_size=T.FONT_SM, padding="5px 10px", bold=False)
+        apply_btn.setFixedHeight(32)
+        apply_btn.clicked.connect(self._apply_preset)
+        combo_row.addWidget(apply_btn)
+        card.add_layout(combo_row)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(6)
+        save_btn = GhostButton("儲存目前設定…", font_size=T.FONT_SM, padding="5px 10px", bold=False)
+        save_btn.clicked.connect(self._save_preset)
+        del_btn  = GhostButton("刪除", font_size=T.FONT_SM, padding="5px 8px", bold=False)
+        del_btn.clicked.connect(self._delete_preset)
+        action_row.addWidget(save_btn)
+        action_row.addWidget(del_btn)
+        action_row.addStretch()
+        card.add_layout(action_row)
+
+        self._reload_presets()
+        return card
+
+    def _combo_qss(self) -> str:
+        return f"""
+            QComboBox {{
+                background: {T.SURFACE_2};
+                border: 1px solid {T.BORDER};
+                border-radius: {T.R_INPUT}px;
+                padding: 4px 8px;
+                font-size: {T.FONT_SM}px;
+                color: {T.TEXT_PRIMARY};
+            }}
+            QComboBox::drop-down {{ border: none; width: 20px; }}
+            QComboBox QAbstractItemView {{
+                background: {T.SURFACE};
+                border: 1px solid {T.BORDER};
+                selection-background-color: {T.PRIMARY_ALPHA};
+                color: {T.TEXT_PRIMARY};
+                font-size: {T.FONT_SM}px;
+            }}
+        """
+
+    def _reload_presets(self) -> None:
+        from src.gui import preset_manager as PM
+        self._preset_combo.clear()
+        for name in PM.load_all():
+            self._preset_combo.addItem(name)
+
+    def _apply_preset(self) -> None:
+        from src.gui import preset_manager as PM
+        name = self._preset_combo.currentText()
+        if not name:
+            return
+        presets = PM.load_all()
+        if name in presets:
+            s = PM.from_dict(presets[name])
+            self.restore_settings(s)
+            self._emit()
+
+    def _save_preset(self) -> None:
+        from src.gui import preset_manager as PM
+        name, ok = QInputDialog.getText(
+            self, "儲存預設組", "輸入預設名稱："
+        )
+        if ok and name.strip():
+            PM.save(name.strip(), self.current_settings())
+            self._reload_presets()
+            idx = self._preset_combo.findText(name.strip())
+            if idx >= 0:
+                self._preset_combo.setCurrentIndex(idx)
+
+    def _delete_preset(self) -> None:
+        from src.gui import preset_manager as PM
+        name = self._preset_combo.currentText()
+        if name:
+            PM.delete(name)
+            self._reload_presets()
 
     # ── 區段：輸出比例 ────────────────────────────────────────────────────────
 
@@ -402,6 +503,60 @@ class SettingsPanel(QScrollArea):
 
         self._color_swatches[0].set_selected(True)
         color_lay.addLayout(outer)
+
+        # ── 自訂顏色列（Hex 輸入 + 選色器）──
+        custom_row = QHBoxLayout()
+        custom_row.setSpacing(6)
+        custom_row.setContentsMargins(0, T.S1, 0, 0)
+
+        self._hex_input = QLineEdit()
+        self._hex_input.setPlaceholderText("#ffffff")
+        self._hex_input.setFixedWidth(76)
+        self._hex_input.setFixedHeight(28)
+        self._hex_input.setMaxLength(7)
+        self._hex_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {T.SURFACE_2};
+                border: 1px solid {T.BORDER};
+                border-radius: {T.R_INPUT}px;
+                padding: 3px 7px;
+                font-size: {T.FONT_SM}px;
+                color: {T.TEXT_PRIMARY};
+                font-family: monospace;
+            }}
+            QLineEdit:focus {{ border-color: {T.PRIMARY}; }}
+        """)
+        self._hex_input.editingFinished.connect(self._on_hex_edit)
+        _tm().theme_changed.connect(lambda _: self._hex_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {T.SURFACE_2};
+                border: 1px solid {T.BORDER};
+                border-radius: {T.R_INPUT}px;
+                padding: 3px 7px;
+                font-size: {T.FONT_SM}px;
+                color: {T.TEXT_PRIMARY};
+                font-family: monospace;
+            }}
+            QLineEdit:focus {{ border-color: {T.PRIMARY}; }}
+        """))
+
+        # 顏色預覽小方塊
+        self._hex_preview = QLabel()
+        self._hex_preview.setFixedSize(28, 28)
+        self._hex_preview.setStyleSheet(
+            f"background: #ffffff; border: 1.5px solid {T.BORDER}; border-radius: 4px;"
+        )
+
+        pick_btn = GhostButton("選色…", font_size=T.FONT_SM, padding="4px 10px", bold=False)
+        pick_btn.setFixedHeight(28)
+        pick_btn.clicked.connect(self._open_color_dialog)
+
+        custom_row.addWidget(self._hex_input)
+        custom_row.addWidget(self._hex_preview)
+        custom_row.addWidget(pick_btn)
+        custom_row.addStretch()
+        color_lay.addLayout(custom_row)
+
         card.add(self._color_section)
         return card
 
@@ -417,8 +572,7 @@ class SettingsPanel(QScrollArea):
                     border-radius: {T.R_CHIP}px;
                     font-size: {T.FONT_BASE}px;
                     font-weight: {"700" if sel else "500"};
-                    padding: 3px 16px;
-                    text-align: center;
+                    padding: 2px 16px;
                 }}
                 QPushButton:hover:!checked {{
                     background: {T.SURFACE_2};
@@ -442,11 +596,38 @@ class SettingsPanel(QScrollArea):
         self._color_section.setVisible(not self._blur_bg_cb.isChecked())
         self._emit()
 
-    def _on_color_click(self, color: tuple[int, int, int]) -> None:
-        self._bg_color = color
+    def _on_hex_edit(self) -> None:
+        raw = self._hex_input.text().strip()
+        if not raw.startswith("#"):
+            raw = "#" + raw
+        qc = QColor(raw)
+        if qc.isValid():
+            rgb = (qc.red(), qc.green(), qc.blue())
+            self._set_custom_color(rgb)
+
+    def _open_color_dialog(self) -> None:
+        init = QColor(*self._bg_color)
+        chosen = QColorDialog.getColor(
+            init, self, "選擇外框顏色",
+            QColorDialog.ColorDialogOption.DontUseNativeDialog,
+        )
+        if chosen.isValid():
+            rgb = (chosen.red(), chosen.green(), chosen.blue())
+            self._set_custom_color(rgb)
+
+    def _set_custom_color(self, rgb: tuple) -> None:
+        self._bg_color = rgb
         for sw in self._color_swatches:
-            sw.set_selected(sw._color == color)
+            sw.set_selected(sw._color == rgb)
+        hex_str = "#{:02x}{:02x}{:02x}".format(*rgb)
+        self._hex_input.setText(hex_str)
+        self._hex_preview.setStyleSheet(
+            f"background: {hex_str}; border: 1.5px solid {T.BORDER}; border-radius: 4px;"
+        )
         self._emit()
+
+    def _on_color_click(self, color: tuple[int, int, int]) -> None:
+        self._set_custom_color(color)
 
     # ── 區段：品牌 & EXIF ─────────────────────────────────────────────────────
 
@@ -631,7 +812,7 @@ class SettingsPanel(QScrollArea):
         card.add(_Divider())
 
         # 匯出按鈕
-        self._export_btn = AnimatedButton("匯出照片", font_size=T.FONT_LG, padding="13px 0")
+        self._export_btn = AnimatedButton("匯出", font_size=T.FONT_LG, padding="13px 0")
         self._export_btn.setEnabled(False)
         self._export_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._export_btn.setMinimumHeight(48)
@@ -682,6 +863,11 @@ class SettingsPanel(QScrollArea):
             self._bg_color = s.bg_color
             for sw in self._color_swatches:
                 sw.set_selected(sw._color == s.bg_color)
+            hex_str = "#{:02x}{:02x}{:02x}".format(*s.bg_color)
+            self._hex_input.setText(hex_str)
+            self._hex_preview.setStyleSheet(
+                f"background: {hex_str}; border: 1.5px solid {T.BORDER}; border-radius: 4px;"
+            )
             # EXIF / Logo 開關
             self._show_logo_cb.setChecked(s.show_logo)
             self._show_exif_cb.setChecked(s.show_exif)
@@ -735,6 +921,30 @@ class SettingsPanel(QScrollArea):
 
     def enable_export(self, enabled: bool) -> None:
         self._export_btn.setEnabled(enabled)
+
+    def add_back_button(self, callback) -> None:
+        """在面板頂部加入「← 返回調色」按鈕。"""
+        from PyQt6.QtWidgets import QPushButton
+        btn = QPushButton("← 返回調色")
+        btn.setFixedHeight(32)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {T.TEXT_SECONDARY};
+                border: 1.5px solid {T.BORDER_LIGHT};
+                border-radius: {T.R_CHIP}px;
+                font-size: {T.FONT_SM}px;
+                padding: 2px 12px;
+            }}
+            QPushButton:hover {{
+                background: {T.SURFACE_2};
+                color: {T.TEXT_PRIMARY};
+                border-color: {T.BORDER};
+            }}
+        """)
+        btn.clicked.connect(callback)
+        # 插入到最頂層 layout 第一個位置
+        self.widget().layout().insertWidget(0, btn)
 
     @property
     def export_button(self) -> AnimatedButton:

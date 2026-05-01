@@ -127,7 +127,7 @@ class DropZone(QWidget):
         # 格式提示（最小）
         p.setFont(T.ui_font(T.FONT_XS))
         p.setPen(QPen(QColor(T.TEXT_MUTED)))
-        p.drawText(QRectF(0, cy + 50, W, 16), Qt.AlignmentFlag.AlignCenter, "JPG  ·  PNG  ·  TIFF  ·  WebP  ·  BMP")
+        p.drawText(QRectF(0, cy + 50, W, 16), Qt.AlignmentFlag.AlignCenter, "JPG  ·  PNG  ·  TIFF  ·  WebP  ·  RAW")
         p.end()
 
 
@@ -656,7 +656,19 @@ class ThumbItem(QWidget):
     def __init__(self, idx: int, pixmap: QPixmap, parent=None):
         super().__init__(parent)
         self._idx      = idx
-        # 縮放後裁切至中央正方形，避免非正方形照片被拉伸
+        self._selected = False
+        self._synced   = False
+        self._hovered  = False
+        W = self._SZ + 8   # widget 寬高 = 縮圖 + 上下各 4px 間距
+        self.setFixedSize(W, W)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setToolTip("Ctrl＋點擊 加入多選　Shift＋點擊 範圍選取")
+        _tm().theme_changed.connect(lambda _: self.update())
+        self._set_pixmap(pixmap)
+
+    def _set_pixmap(self, pixmap: QPixmap) -> None:
+        """縮放後裁切至中央正方形，避免非正方形照片被拉伸。"""
         _scaled = pixmap.scaled(
             self._SZ, self._SZ,
             Qt.AspectRatioMode.KeepAspectRatioByExpanding,
@@ -665,15 +677,11 @@ class ThumbItem(QWidget):
         ox = (_scaled.width()  - self._SZ) // 2
         oy = (_scaled.height() - self._SZ) // 2
         self._pix = _scaled.copy(ox, oy, self._SZ, self._SZ)
-        self._selected = False
-        self._synced   = False
-        self._hovered  = False
-        W = self._SZ + 8   # widget 寬高 = 縮圖 + 上下各 4px 間距
-        self.setFixedSize(W, W)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        self.setToolTip("Ctrl+點擊 加入多選　Shift+點擊 範圍選取")
-        _tm().theme_changed.connect(lambda _: self.update())
+
+    def update_pixmap(self, pixmap: QPixmap) -> None:
+        """替換縮圖（RAW 完整解碼後呼叫）。"""
+        self._set_pixmap(pixmap)
+        self.update()
 
     # ── Public ────────────────────────────────────────────────────────────────
 
@@ -853,6 +861,11 @@ class ImageStrip(QScrollArea):
         self._row.insertWidget(self._row.count() - 1, th)
         self.set_current(idx)
         return idx
+
+    def update_thumb(self, idx: int, pil_image: Image.Image) -> None:
+        """替換指定索引的縮圖圖片（RAW 完整解碼後使用）。"""
+        if 0 <= idx < len(self._thumbs):
+            self._thumbs[idx].update_pixmap(_pil_to_pixmap(pil_image))
 
     def set_current(self, idx: int) -> None:
         for i, t in enumerate(self._thumbs):
@@ -1197,6 +1210,12 @@ class PreviewPanel(QWidget):
         self._zoom_ctrl = _ZoomControl(self._canvas)
         self._zoom_ctrl.zoom_changed.connect(self._on_zoom_ctrl_changed)
 
+        # Before/After 浮動指示標籤
+        self._ba_label = QLabel(self._canvas)
+        self._ba_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._ba_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._ba_label.hide()
+
         self._pixmap: QPixmap | None = None
         self._has_image = False
         self._sz_preset = None
@@ -1253,8 +1272,16 @@ class PreviewPanel(QWidget):
         self._info_bar.set_preset(preset)
         self._update_sz_toggle_visibility()
 
+    def disable_safezone(self) -> None:
+        """永久隱藏安全區按鈕與遮罩（調色步驟使用）。"""
+        self._safezone_disabled = True
+        self._sz_toggle.hide()
+        self._safe_overlay.set_visible(False)
+
     def _update_sz_toggle_visibility(self) -> None:
         """安全區按鈕：只在有圖片 且 比例有 safe zone 時才顯示。"""
+        if getattr(self, "_safezone_disabled", False):
+            return
         preset   = getattr(self, "_sz_preset", None)
         has_zone = preset in _SAFE_ZONE_RATIO
         if self._has_image and has_zone:
@@ -1295,6 +1322,34 @@ class PreviewPanel(QWidget):
     def set_split_zoom(self, zoom: float) -> None:
         """從外部更新 SPLIT 縮放，不觸發 emit。"""
         self._split_zoom = max(1.0, min(4.0, zoom))
+
+    def show_before_after(self, mode: str | None) -> None:
+        """mode: 'BEFORE' | 'AFTER' | None（隱藏）。"""
+        if mode is None:
+            self._ba_label.hide()
+            return
+        is_before = (mode == "BEFORE")
+        bg   = "rgba(0,0,0,160)"
+        text_col = "#ffffff" if is_before else T.PRIMARY
+        lbl  = "◀ BEFORE" if is_before else "AFTER ▶"
+        self._ba_label.setText(lbl)
+        self._ba_label.setStyleSheet(f"""
+            QLabel {{
+                background: {bg};
+                color: {text_col};
+                font-size: {T.FONT_BASE}px;
+                font-weight: 700;
+                padding: 4px 12px;
+                border-radius: 6px;
+                letter-spacing: 1px;
+            }}
+        """)
+        self._ba_label.adjustSize()
+        cw = self._canvas.width()
+        ch = self._canvas.height()
+        self._ba_label.move(8, ch - self._ba_label.height() - 8)
+        self._ba_label.show()
+        self._ba_label.raise_()
 
     def set_split_photo(self, pil_image: "Image.Image") -> None:
         """傳入原始照片供移動模式顯示完整圖片。"""
@@ -1363,6 +1418,10 @@ class PreviewPanel(QWidget):
     def set_strip_current(self, idx: int) -> None:
         self._strip.set_current(idx)
 
+    def update_strip_thumb(self, idx: int, pil_image: Image.Image) -> None:
+        """替換縮圖列中指定索引的縮圖（RAW 完整解碼後使用）。"""
+        self._strip.update_thumb(idx, pil_image)
+
     def _fit(self) -> None:
         cw = max(1, self._canvas.width())
         ch = max(1, self._canvas.height())
@@ -1386,6 +1445,11 @@ class PreviewPanel(QWidget):
         zh = self._zoom_ctrl.height()
         self._zoom_ctrl.move(cw - zw - 8, ch - zh - 8)
         self._zoom_ctrl.raise_()
+
+        # Before/After 標籤：左上角，safe zone 按鈕對側
+        if self._ba_label.isVisible():
+            self._ba_label.raise_()
+            self._ba_label.move(8, ch - self._ba_label.height() - 8)
 
         if self._pixmap is None:
             return

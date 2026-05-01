@@ -238,9 +238,11 @@ def _read_with_exifread(path: Path) -> ExifData | None:
                 if f >= 1.0:
                     shutter_str = f"{f:.1f}s"
                 else:
-                    # Use exact Fraction (not float) to avoid floating-point precision loss
                     frac2 = frac.limit_denominator(10000)
-                    shutter_str = f"1/{frac2.denominator}s"
+                    if frac2.numerator == 1:
+                        shutter_str = f"1/{frac2.denominator}s"
+                    else:
+                        shutter_str = f"{frac2.numerator}/{frac2.denominator}s"
             except Exception:
                 shutter_str = str(shutter_raw)
         else:

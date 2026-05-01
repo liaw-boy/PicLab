@@ -262,8 +262,8 @@ class _SyncToggleBtn(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         self.setFixedHeight(self._H)
         fm = QFontMetrics(T.ui_font(T.FONT_SM))
-        w = max(fm.horizontalAdvance("設定已連結"),
-                fm.horizontalAdvance("設定未連結")) + 32 + 20
+        w = max(fm.horizontalAdvance("同步開"),
+                fm.horizontalAdvance("同步關")) + 32 + 20
         self.setFixedWidth(max(w, 110))
         self.setToolTip("開啟後，更改設定將同步套用至所有照片")
         _tm().theme_changed.connect(lambda _: self.update())
@@ -315,7 +315,7 @@ class _SyncToggleBtn(QWidget):
 
         p.drawRoundedRect(M, M, W - M * 2, H - M * 2, R, R)
 
-        label = "設定已連結" if self._on else "設定未連結"
+        label = "同步開" if self._on else "同步關"
 
         # 計算圖示 + 文字的整體寬度，置中對齊
         font = T.ui_font(T.FONT_SM, weight)
@@ -342,14 +342,16 @@ class _SyncToggleBtn(QWidget):
 
 
 class TopBar(QWidget):
-    template_changed  = pyqtSignal(object)
-    export_requested  = pyqtSignal()
-    sync_all_toggled  = pyqtSignal(bool)   # 同步所有圖片設定開關
+    template_changed       = pyqtSignal(object)
+    export_requested       = pyqtSignal()
+    batch_export_requested = pyqtSignal()
+    sync_all_toggled       = pyqtSignal(bool)
+    step_changed           = pyqtSignal(int)    # 1=調色, 2=加框
 
     _TEMPLATES = [
-        (TemplateStyle.CLASSIC, "白邊框"),
-        (TemplateStyle.ROUNDED, "圓　角"),
-        (TemplateStyle.SPLIT,   "分　割"),
+        (TemplateStyle.CLASSIC, "經典"),
+        (TemplateStyle.ROUNDED, "圓角"),
+        (TemplateStyle.SPLIT,   "分割"),
     ]
 
     def __init__(self, parent=None):
@@ -367,23 +369,49 @@ class TopBar(QWidget):
         lay.setSpacing(0)
 
         # App name
-        name = QLabel("照片白邊工具")
+        name = QLabel("PicLab")
         name.setObjectName("AppName")
         lay.addWidget(name)
-        lay.addSpacing(20)
+        lay.addSpacing(14)
 
         # 分隔線
-        sep1 = QFrame()
-        sep1.setObjectName("BarSep")
-        sep1.setFrameShape(QFrame.Shape.VLine)
-        sep1.setFixedHeight(28)
-        lay.addWidget(sep1)
-        lay.addSpacing(16)
+        sep0 = QFrame()
+        sep0.setObjectName("BarSep")
+        sep0.setFrameShape(QFrame.Shape.VLine)
+        sep0.setFixedHeight(28)
+        lay.addWidget(sep0)
+        lay.addSpacing(12)
+
+        # ── 步驟切換按鈕 ──
+        self._step = 1
+        self._step_btn1 = _TplBtn(1, "調色")
+        self._step_btn2 = _TplBtn(2, "加框")
+        self._step_btn1.set_active(True)
+        self._step_btn1.setFixedWidth(84)
+        self._step_btn2.setFixedWidth(84)
+        self._step_btn1.clicked.connect(lambda _: self._go_step(1))
+        self._step_btn2.clicked.connect(lambda _: self._go_step(2))
+        lay.addWidget(self._step_btn1)
+        lay.addSpacing(4)
+        _arrow = QLabel("→")
+        _arrow.setObjectName("StepArrow")
+        lay.addWidget(_arrow)
+        lay.addSpacing(4)
+        lay.addWidget(self._step_btn2)
+        lay.addSpacing(14)
+
+        # 分隔線（版型區，隨版型區塊一起顯示/隱藏）
+        self._tpl_sep = QFrame()
+        self._tpl_sep.setObjectName("BarSep")
+        self._tpl_sep.setFrameShape(QFrame.Shape.VLine)
+        self._tpl_sep.setFixedHeight(28)
+        lay.addWidget(self._tpl_sep)
+        lay.addSpacing(14)
 
         # 版型標籤
-        tpl_label = QLabel("版型")
-        tpl_label.setObjectName("BarLabel")
-        lay.addWidget(tpl_label)
+        self._tpl_label = QLabel("版型")
+        self._tpl_label.setObjectName("BarLabel")
+        lay.addWidget(self._tpl_label)
         lay.addSpacing(10)
 
         # ── 版型按鈕（QPainter chip，間距 8px）──
@@ -400,8 +428,11 @@ class TopBar(QWidget):
 
         lay.addStretch()
 
+        # 步驟 1 預設隱藏版型區
+        self._set_template_area_visible(False)
+
         # ── 主題循環按鈕（QPainter NavBtn 風格）──
-        self._theme_btn = _TopBarBtn("切換主題", _draw_theme_icon, primary=False)
+        self._theme_btn = _TopBarBtn("外觀", _draw_theme_icon, primary=False)
         self._theme_btn.clicked.connect(_tm().cycle_theme)
         lay.addWidget(self._theme_btn)
         lay.addSpacing(10)
@@ -412,8 +443,15 @@ class TopBar(QWidget):
         lay.addWidget(self._sync_btn)
         lay.addSpacing(10)
 
+        # ── 批次匯出按鈕 ──
+        self._batch_btn = _TopBarBtn("全部匯出", _draw_export_icon, primary=False)
+        self._batch_btn.setEnabled(False)
+        self._batch_btn.clicked.connect(self.batch_export_requested)
+        lay.addWidget(self._batch_btn)
+        lay.addSpacing(6)
+
         # ── 匯出按鈕（QPainter NavBtn 風格，PRIMARY 配色）──
-        self._export_btn = _TopBarBtn("匯出照片", _draw_export_icon, primary=True)
+        self._export_btn = _TopBarBtn("匯出", _draw_export_icon, primary=True)
         self._export_btn.setEnabled(False)
         self._export_btn.clicked.connect(self.export_requested)
         lay.addWidget(self._export_btn)
@@ -443,7 +481,32 @@ class TopBar(QWidget):
                 letter-spacing: 0.5px;
                 background: transparent;
             }}
+            QLabel#StepArrow {{
+                color: {T.TEXT_MUTED};
+                font-size: {T.FONT_BASE}px;
+                background: transparent;
+            }}
         """)
+
+    def _set_template_area_visible(self, visible: bool) -> None:
+        self._tpl_sep.setVisible(visible)
+        self._tpl_label.setVisible(visible)
+        for btn in self._tpl_btns:
+            btn.setVisible(visible)
+
+    def _go_step(self, step: int) -> None:
+        self._step = step
+        self._step_btn1.set_active(step == 1)
+        self._step_btn2.set_active(step == 2)
+        self._set_template_area_visible(step == 2)
+        self.step_changed.emit(step)
+
+    def set_step(self, step: int) -> None:
+        """靜默更新步驟按鈕狀態（不觸發 step_changed）。"""
+        self._step = step
+        self._step_btn1.set_active(step == 1)
+        self._step_btn2.set_active(step == 2)
+        self._set_template_area_visible(step == 2)
 
     def _on_template_click(self, style: TemplateStyle) -> None:
         self._selected = style
@@ -462,3 +525,4 @@ class TopBar(QWidget):
 
     def enable_export(self, enabled: bool) -> None:
         self._export_btn.setEnabled(enabled)
+        self._batch_btn.setEnabled(enabled)

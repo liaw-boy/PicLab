@@ -114,23 +114,143 @@ def _draw_open(p: QPainter, cx: int, cy: int, col: QColor) -> None:
     p.drawLine(cx - 4, cy + 5, cx + 4, cy + 5)
 
 
+# ── Develop 模式圖示 ──────────────────────────────────────────────────────────
+
+def _draw_curve(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """Tone Curve：S 型曲線"""
+    from PyQt6.QtGui import QPainterPath
+    pen = QPen(col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # 邊框
+    p.drawRect(cx - 13, cy - 12, 26, 24)
+    # S 型曲線
+    path = QPainterPath()
+    path.moveTo(cx - 13, cy + 12)
+    path.cubicTo(cx - 6, cy + 12, cx - 6, cy, cx, cy)
+    path.cubicTo(cx + 6, cy, cx + 6, cy - 12, cx + 13, cy - 12)
+    p.drawPath(path)
+
+
+def _draw_wb(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """White Balance：太陽 + 色溫箭頭"""
+    pen = QPen(col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # 太陽圓圈
+    p.drawEllipse(QRectF(cx - 6, cy - 6, 12, 12))
+    # 8 條放射光線
+    import math
+    for i in range(8):
+        angle = i * math.pi / 4
+        x1 = cx + math.cos(angle) * 8
+        y1 = cy + math.sin(angle) * 8
+        x2 = cx + math.cos(angle) * 11
+        y2 = cy + math.sin(angle) * 11
+        p.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+
+def _draw_light(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """Light：曝光表（垂直漸層條 + 指針）"""
+    pen = QPen(col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.SquareCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # 外框
+    p.drawRect(cx - 10, cy - 12, 20, 24)
+    # 中線
+    pen_dash = QPen(col, 1, Qt.PenStyle.DashLine)
+    p.setPen(pen_dash)
+    p.drawLine(cx - 10, cy, cx + 10, cy)
+    # 指針（向上偏，代表 +EV）
+    pen2 = QPen(col, 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+    p.setPen(pen2)
+    p.drawLine(cx, cy - 6, cx, cy - 1)
+
+
+def _draw_hsl(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """HSL：色相環（圓弧 + 飽和度點）"""
+    from PyQt6.QtGui import QPainterPath
+    pen = QPen(col, 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # 外圓環
+    p.drawEllipse(QRectF(cx - 11, cy - 11, 22, 22))
+    # 內部飽和度方塊
+    p.drawRect(cx - 6, cy - 6, 12, 12)
+    # 中心點
+    p.setBrush(QBrush(col))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawEllipse(QRectF(cx - 2, cy - 2, 4, 4))
+
+
+def _draw_detail(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """Detail：放大鏡 + 銳化虛線"""
+    pen = QPen(col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawEllipse(QRectF(cx - 12, cy - 12, 16, 16))
+    p.drawLine(cx + 4, cy + 4, cx + 12, cy + 12)
+    pen2 = QPen(col, 1.5, Qt.PenStyle.DotLine)
+    p.setPen(pen2)
+    p.drawLine(cx - 8, cy - 4, cx + 2, cy - 4)
+    p.drawLine(cx - 8, cy,     cx + 2, cy)
+    p.drawLine(cx - 8, cy + 4, cx + 2, cy + 4)
+
+
+def _draw_film(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """底片模擬：底片捲軸外框 + 齒孔"""
+    pen = QPen(col, 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+               Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # 底片外框
+    p.drawRoundedRect(QRectF(cx - 13, cy - 9, 26, 18), 3, 3)
+    # 左側齒孔（兩個小方塊）
+    p.setBrush(QBrush(col))
+    p.setPen(Qt.PenStyle.NoPen)
+    for dy in (-4, 4):
+        p.drawRoundedRect(QRectF(cx - 16, cy + dy - 2.5, 5, 5), 1, 1)
+        p.drawRoundedRect(QRectF(cx + 11, cy + dy - 2.5, 5, 5), 1, 1)
+    # 中央圓形（鏡頭暗示）
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(QPen(col, 1.5))
+    p.drawEllipse(QRectF(cx - 5, cy - 5, 10, 10))
+
+
 # ── 圖示映射 ──────────────────────────────────────────────────────────────────
 
 _ICON_DRAW = {
+    # Print 模式
     "ratio":    _draw_ratio,
     "border":   _draw_border,
     "color":    _draw_color,
     "brand":    _draw_brand,
     "export":   _draw_export,
     "__open__": _draw_open,
+    # Develop 模式
+    "wb":       _draw_wb,
+    "light":    _draw_light,
+    "hsl":      _draw_hsl,
+    "curve":    _draw_curve,
+    "detail":   _draw_detail,
+    "film":     _draw_film,
 }
 
-_NAV_ITEMS = [
-    ("ratio",    "輸出比例"),
-    ("border",   "邊框設定"),
-    ("color",    "外框顏色"),
-    ("brand",    "品牌資訊"),
-    ("export",   "匯出設定"),
+_NAV_ITEMS_PRINT = [
+    ("ratio",  "比例"),
+    ("border", "邊框"),
+    ("color",  "顏色"),
+    ("brand",  "品牌"),
+    ("export", "匯出"),
+]
+
+_NAV_ITEMS_DEVELOP = [
+    ("wb",     "白平衡"),
+    ("light",  "亮度"),
+    ("hsl",    "飽和度"),
+    ("curve",  "色調曲線"),
+    ("detail", "細節"),
+    ("film",   "底片"),
 ]
 
 
@@ -196,21 +316,21 @@ class _NavBtn(QWidget):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(Qt.PenStyle.NoPen)
             icon_col = QColor(T.TEXT_SECONDARY)
-            text_col = QColor(T.TEXT_MUTED)
+            text_col = QColor(T.TEXT_PRIMARY)
 
         # ── 圖示區（上 3/4）──────────────────────────────────────────────────
         cx = W // 2
-        cy = H // 2 - 6     # 圖示往上偏移，留空間給標籤
+        cy = H // 2 - 8     # 圖示往上偏移，留空間給標籤
 
         draw_fn = _ICON_DRAW.get(self._section)
         if draw_fn:
             draw_fn(p, cx, cy, icon_col)
 
         # ── 標籤文字（下方）──────────────────────────────────────────────────
-        p.setFont(T.ui_font(T.FONT_XS, QFont.Weight.Bold if self._active else QFont.Weight.Medium))
+        p.setFont(T.ui_font(T.FONT_SM, QFont.Weight.Bold if self._active else QFont.Weight.Medium))
         p.setPen(QPen(text_col))
         p.drawText(
-            QRect(0, H - 22, W, 18),
+            QRect(0, H - 24, W, 20),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter,
             self._label
         )
@@ -303,18 +423,24 @@ class _OpenBtn(QWidget):
 class LeftNavBar(QWidget):
     section_requested = pyqtSignal(str)
 
-    def __init__(self, parent=None):
+    def __init__(self, mode: str = "print", parent=None):
+        """
+        mode: "print"   → ratio / border / color / brand / export
+              "develop" → curve / wb / light / hsl / detail
+        """
         super().__init__(parent)
         self.setObjectName("LeftNavBar")
         self.setFixedWidth(72)
         self._btns: dict[str, _NavBtn] = {}
+
+        nav_items = _NAV_ITEMS_DEVELOP if mode == "develop" else _NAV_ITEMS_PRINT
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 10, 0, 10)
         lay.setSpacing(4)
         lay.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        for section, label in _NAV_ITEMS:
+        for section, label in nav_items:
             btn = _NavBtn(section, label)
             btn.clicked.connect(self._on_nav_click)
             self._btns[section] = btn

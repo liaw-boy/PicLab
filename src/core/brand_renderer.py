@@ -14,6 +14,7 @@ LOGO_FILES: dict[str, str] = {
     "Nikon":      "Nikon_yellow.png",
     "Fujifilm":   "fujifilm.png",
     "Olympus":    "olympus.png",
+    "OM System":  "olympus.png",
     "Leica":      "Leica_red.png",
     "Panasonic":  "lumix.png",
     "Ricoh":      "ricoh.png",

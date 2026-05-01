@@ -255,7 +255,7 @@ class SegmentedControl(QWidget):
                         border-radius: {T.R_BUTTON}px;
                         font-size: {T.FONT_SM}px;
                         font-weight: 700;
-                        padding: 3px 8px;
+                        padding: 2px 8px;
                     }}
                 """)
             else:
@@ -267,7 +267,7 @@ class SegmentedControl(QWidget):
                         border-radius: {T.R_BUTTON}px;
                         font-size: {T.FONT_SM}px;
                         font-weight: 500;
-                        padding: 3px 8px;
+                        padding: 2px 8px;
                     }}
                     QPushButton:hover {{
                         color: {T.TEXT_PRIMARY};

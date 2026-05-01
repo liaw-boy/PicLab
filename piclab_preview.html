@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>PicLab</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0B0B0E;--ink2:#111116;--ink3:#18181F;--ink4:#21212A;--ink5:#2C2C38;
+  --glass:rgba(255,255,255,0.04);--glass2:rgba(255,255,255,0.07);
+  --gold:#C5A46A;--gold-d:rgba(197,164,106,0.15);--gold-g:rgba(197,164,106,0.07);
+  --text:#EAE8E0;--text2:#9896A0;--text3:#5C5A66;
+  --ok:#4ADE80;--warn:#FBBF24;--err:#F87171;
+  --mono:'JetBrains Mono',monospace;--sans:'Inter',-apple-system,sans-serif;
+  --ease:cubic-bezier(0.16,1,0.3,1);
+}
+body{font-family:var(--sans);background:#050508;display:flex;flex-direction:column;align-items:center;padding:28px 20px;gap:18px;min-height:100vh}
+
+/* ─ page nav ─ */
+.p-nav{display:flex;gap:4px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:100px;padding:4px}
+.p-tab{font-size:11px;font-weight:500;color:var(--text3);padding:5px 14px;border:none;background:none;border-radius:100px;cursor:pointer;transition:all .15s}
+.p-tab.on{background:var(--ink4);color:var(--text)}
+.p-tab:hover:not(.on){color:var(--text2)}
+
+/* ─ app frame ─ */
+.app{width:1280px;height:820px;background:var(--ink);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.06),0 32px 120px rgba(0,0,0,.85);position:relative}
+.page{display:none;flex-direction:column;flex:1;overflow:hidden}
+.page.on{display:flex}
+
+/* ─ titlebar ─ */
+.tbar{height:42px;background:var(--ink2);border-bottom:1px solid rgba(255,255,255,0.05);
+  display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;position:relative}
+.tlights{display:flex;gap:6px}
+.tl{width:11px;height:11px;border-radius:50%}
+.tl-r{background:#FF5F57}.tl-y{background:#FEBC2E}.tl-g{background:#28C840}
+.tbar-title{position:absolute;left:50%;transform:translateX(-50%);font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.5px}
+.tbar-right{margin-left:auto;display:flex;gap:6px;align-items:center}
+.tbtn{height:24px;padding:0 10px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);
+  color:var(--text2);font-family:var(--sans);font-size:11px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;transition:all .12s}
+.tbtn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.tbtn.gold{background:var(--gold);color:#0B0B0E;border-color:transparent;font-weight:600}
+.tbtn.gold:hover{filter:brightness(1.1)}
+
+/* ─ tpl switcher ─ */
+.tpl-sw{display:flex;gap:1px}
+.tpl-btn{font-size:11px;font-weight:500;color:var(--text3);padding:4px 11px;border:none;background:none;border-radius:5px;cursor:pointer;transition:all .12s}
+.tpl-btn.on{background:var(--ink4);color:var(--text)}
+
+/* ─ layout ─ */
+.lay{flex:1;display:flex;overflow:hidden}
+
+/* ─ sidebar ─ */
+.sbar{width:50px;background:var(--ink2);border-right:1px solid rgba(255,255,255,0.05);
+  display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:1px;flex-shrink:0}
+.sb{width:34px;height:34px;border-radius:7px;border:none;background:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all .15s;position:relative}
+.sb:hover{background:var(--glass);color:var(--text2)}
+.sb.on{background:var(--gold-d);color:var(--gold)}
+.sb .tt{position:absolute;left:calc(100% + 8px);background:var(--ink4);border:1px solid rgba(255,255,255,0.08);
+  color:var(--text);font-size:10px;padding:3px 8px;border-radius:5px;white-space:nowrap;
+  pointer-events:none;opacity:0;transform:translateX(-4px);transition:all .12s;z-index:50}
+.sb:hover .tt{opacity:1;transform:translateX(0)}
+.sb-sep{width:22px;height:1px;background:rgba(255,255,255,0.05);margin:3px 0}
+.sb-sp{flex:1}
+svg.ic{display:block;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+/* ─ preview area ─ */
+.prev{flex:1;display:flex;flex-direction:column;background:var(--ink);overflow:hidden;position:relative}
+.prev-tb{height:38px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0}
+.zgrp{display:flex;align-items:center;gap:3px}
+.zbtn{width:22px;height:22px;border-radius:4px;border:1px solid rgba(255,255,255,0.07);background:none;color:var(--text2);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .12s}
+.zbtn:hover{background:var(--glass);color:var(--text)}
+.zlbl{font-size:10px;font-family:var(--mono);color:var(--text3);min-width:34px;text-align:center}
+.tb-sep{width:1px;height:18px;background:rgba(255,255,255,0.06)}
+.itag{font-size:10px;font-family:var(--mono);color:var(--text3);background:var(--ink3);border:1px solid rgba(255,255,255,0.05);padding:2px 7px;border-radius:3px}
+.itag.g{color:var(--gold);border-color:rgba(197,164,106,.2);background:var(--gold-g)}
+.itag-r{margin-left:auto;display:flex;gap:5px}
+
+/* Develop toolbar (grade page) */
+.dev-tb{height:38px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;padding:0 14px;gap:6px;flex-shrink:0}
+.dtool{width:28px;height:28px;border-radius:6px;border:1px solid rgba(255,255,255,0.07);background:none;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;position:relative}
+.dtool:hover{background:var(--glass);color:var(--text2)}
+.dtool.on{background:var(--gold-d);color:var(--gold);border-color:rgba(197,164,106,.3)}
+.dtool .tt{position:absolute;top:calc(100%+6px);left:50%;transform:translateX(-50%);background:var(--ink4);border:1px solid rgba(255,255,255,0.08);color:var(--text);font-size:10px;padding:3px 7px;border-radius:4px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .1s;z-index:50}
+.dtool:hover .tt{opacity:1}
+.dtool-sep{width:1px;height:18px;background:rgba(255,255,255,0.06)}
+.ba-btn{height:26px;padding:0 10px;border-radius:5px;border:1px solid rgba(255,255,255,0.08);background:none;color:var(--text2);font-size:10px;font-weight:600;letter-spacing:.3px;cursor:pointer;transition:all .12s;margin-left:auto}
+.ba-btn:hover,.ba-btn.on{background:var(--ink4);color:var(--text)}
+.ba-btn.on{border-color:var(--gold);color:var(--gold)}
+
+/* canvas */
+.canv{flex:1;display:flex;align-items:center;justify-content:center;background:var(--ink);position:relative;overflow:hidden}
+.canv::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,0.012) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.012) 1px,transparent 1px);background-size:40px 40px;pointer-events:none}
+
+/* photo mocks */
+.mock-c{display:flex;flex-direction:column;background:#fff;box-shadow:0 20px 70px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,0.05);transition:all .3s var(--ease)}
+.photo-img{width:380px;height:285px;background:radial-gradient(ellipse at 25% 35%,rgba(180,140,80,.4) 0%,transparent 50%),radial-gradient(ellipse at 70% 65%,rgba(80,100,140,.3) 0%,transparent 50%),linear-gradient(160deg,#2C241A 0%,#1A1510 40%,#0F0D08 100%);position:relative;overflow:hidden}
+.photo-img.ba-after{filter:saturate(1.4) contrast(1.08)}
+.photo-grain{position:absolute;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");mix-blend-mode:overlay;pointer-events:none}
+/* before/after split */
+.ba-split{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--gold);z-index:10;cursor:col-resize}
+.ba-split::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:var(--gold);border:2px solid white}
+.ba-label{position:absolute;top:8px;font-size:9px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,0.5);text-transform:uppercase}
+.exif-strip{padding:9px 14px;display:flex;align-items:center;justify-content:space-between;background:#fff}
+.brand-badge{background:#1A1A1A;color:#fff;font-size:8px;font-weight:800;letter-spacing:.8px;padding:3px 6px;border-radius:2px}
+.cam-info{display:flex;flex-direction:column;gap:1px;margin-left:7px}
+.cam-model{font-size:10px;font-weight:600;color:#1A1A1A}
+.cam-lens{font-size:9px;color:#888}
+.exif-r{text-align:right}
+.exif-p{font-size:10px;font-weight:700;color:#1A1A1A;font-family:var(--mono)}
+.exif-s{font-size:9px;color:#999;font-family:monospace}
+
+/* Rounded mock */
+.mock-r{background:#fff;padding:22px;box-shadow:0 20px 70px rgba(0,0,0,.7)}
+.photo-r{width:300px;height:300px;border-radius:10px;overflow:hidden;background:radial-gradient(ellipse at 30% 40%,rgba(100,160,80,.4) 0%,transparent 50%),linear-gradient(160deg,#1A2C1A,#0F1A0F);position:relative}
+
+/* Split mock */
+.mock-s{width:500px;height:290px;display:flex;box-shadow:0 20px 70px rgba(0,0,0,.7)}
+.split-l{width:35%;background:#111;padding:18px 14px;display:flex;flex-direction:column;justify-content:space-between}
+.split-params{display:flex;flex-direction:column;gap:10px}
+.sp-lbl{font-size:8px;color:rgba(255,255,255,.3);letter-spacing:1.5px;text-transform:uppercase;font-family:var(--mono)}
+.sp-val{font-size:14px;font-weight:600;color:#fff;font-family:var(--mono)}
+.split-r{flex:1;background:radial-gradient(ellipse at 35% 40%,rgba(130,100,60,.5) 0%,transparent 55%),linear-gradient(160deg,#2A1E12,#1A1208);position:relative;overflow:hidden}
+
+/* Histogram overlay */
+.hist-float{position:absolute;bottom:14px;right:14px;width:108px;height:54px;background:rgba(8,8,12,.78);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:6px;display:flex;align-items:flex-end;gap:1px}
+.hb{flex:1;border-radius:1px 1px 0 0;background:rgba(255,255,255,.32)}
+.hb.r{background:rgba(248,113,113,.5)}.hb.g{background:rgba(74,222,128,.5)}.hb.b{background:rgba(96,165,250,.5)}
+
+/* Clipping indicators */
+.clip-ind{position:absolute;top:8px;display:flex;gap:3px}
+.clip-ind.left{left:8px}.clip-ind.right{right:8px}
+.clip-dot{width:14px;height:14px;border-radius:2px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:8px;color:rgba(255,255,255,.4)}
+.clip-dot.warn{background:rgba(248,113,113,0.3);color:var(--err)}
+
+/* filmstrip */
+.film{height:84px;background:var(--ink2);border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;padding:0 14px;gap:7px;overflow-x:auto;flex-shrink:0}
+.film::-webkit-scrollbar{display:none}
+.fi{width:58px;flex-shrink:0;display:flex;flex-direction:column;gap:3px;cursor:pointer}
+.fi-thumb{width:58px;height:46px;border-radius:5px;overflow:hidden;border:2px solid transparent;transition:all .15s;position:relative}
+.fi.on .fi-thumb{border-color:var(--gold)}
+.fi:hover:not(.on) .fi-thumb{border-color:rgba(255,255,255,0.18)}
+.fi-bg{width:100%;height:100%}
+.fi-meta{display:flex;align-items:center;justify-content:space-between;padding:0 1px}
+.fi-flag{font-size:9px;opacity:.5}
+.fi-flag.pick{color:#4ADE80;opacity:1}
+.fi-flag.rej{color:#F87171;opacity:1}
+.fi-stars{display:flex;gap:1px}
+.fi-star{font-size:7px;color:rgba(255,255,255,0.2)}
+.fi-star.on{color:var(--gold)}
+.fi-add{width:58px;height:46px;border-radius:5px;border:1.5px dashed rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;color:var(--text3);cursor:pointer;font-size:18px;flex-shrink:0}
+
+/* ─ RIGHT PANEL ─ */
+.rpanel{width:270px;background:var(--ink2);border-left:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+
+/* Navigator */
+.nav-box{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)}
+.nav-prev{width:100%;height:58px;border-radius:5px;overflow:hidden;background:radial-gradient(ellipse at 25% 35%,rgba(160,120,60,.4),transparent 50%),linear-gradient(160deg,#2C241A,#0F0D08);position:relative;cursor:crosshair}
+.nav-frame{position:absolute;border:1px solid var(--gold);opacity:.8;pointer-events:none}
+.nav-zooms{display:flex;gap:4px;margin-top:6px}
+.nz{font-size:9px;font-family:var(--mono);color:var(--text3);padding:2px 6px;border-radius:3px;cursor:pointer;border:1px solid transparent;transition:all .1s}
+.nz.on{background:var(--ink4);color:var(--text);border-color:rgba(255,255,255,0.08)}
+.nz:hover:not(.on){color:var(--text2)}
+
+/* Histogram (panel) */
+.hist-box{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04)}
+.hist-canvas{width:100%;height:60px;background:var(--ink3);border-radius:6px;position:relative;overflow:hidden;cursor:crosshair}
+.hist-canvas svg{width:100%;height:100%;position:absolute;top:0;left:0}
+.hist-zone{position:absolute;top:0;bottom:0;display:flex;align-items:flex-end;padding-bottom:3px;justify-content:center;font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0);letter-spacing:.5px;transition:all .15s;border-left:1px solid transparent}
+.hist-canvas:hover .hist-zone{color:rgba(255,255,255,.25)}
+.hist-canvas:hover .hist-zone:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.6);cursor:col-resize}
+.hist-clips{display:flex;justify-content:space-between;margin-top:4px}
+.hist-clip{font-size:9px;font-family:var(--mono);color:var(--text3);cursor:pointer;padding:1px 4px;border-radius:2px;transition:all .1s}
+.hist-clip:hover{color:var(--text2)}
+.hist-clip.warn{color:var(--err)}
+
+/* Panel sections */
+.psections{flex:1;overflow-y:auto}
+.psections::-webkit-scrollbar{width:3px}
+.psections::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.07);border-radius:3px}
+.psec{border-bottom:1px solid rgba(255,255,255,0.04)}
+.psec-hd{display:flex;align-items:center;padding:8px 12px;cursor:pointer;user-select:none;transition:background .1s}
+.psec-hd:hover{background:rgba(255,255,255,0.03)}
+.psec-tri{font-size:7px;color:var(--text3);margin-right:6px;transition:transform .15s;display:inline-block}
+.psec.closed .psec-tri{transform:rotate(-90deg)}
+.psec-name{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text2);flex:1}
+.psec-auto{font-size:9px;font-weight:600;letter-spacing:.5px;color:var(--text3);padding:2px 7px;border-radius:3px;border:1px solid rgba(255,255,255,0.08);background:none;cursor:pointer;transition:all .12s}
+.psec-auto:hover{color:var(--text);border-color:rgba(255,255,255,0.2)}
+.psec-body{padding:0 12px 12px}
+.psec.closed .psec-body{display:none}
+
+/* Slider rows LRC-style */
+.slrow{display:flex;align-items:center;gap:6px;height:26px}
+.sl-lbl{font-size:10px;color:var(--text2);width:72px;flex-shrink:0;text-align:right}
+.sl-track{flex:1;position:relative;height:2px;background:var(--ink5);border-radius:2px;cursor:pointer}
+.sl-fill{position:absolute;left:0;top:0;bottom:0;background:var(--gold);border-radius:2px}
+.sl-thumb{position:absolute;top:50%;transform:translate(-50%,-50%);width:11px;height:11px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:grab}
+input.sl{-webkit-appearance:none;width:100%;height:2px;border-radius:2px;outline:none;cursor:pointer;background:var(--ink5)}
+input.sl::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.6);cursor:grab}
+input.sl::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.2)}
+.sl-val{font-size:10px;font-family:var(--mono);color:var(--gold);width:32px;text-align:right;flex-shrink:0}
+.sl-reset{width:10px;font-size:10px;color:transparent;cursor:pointer;transition:color .1s;flex-shrink:0}
+.slrow:hover .sl-reset{color:var(--text3)}
+.sl-reset:hover{color:var(--text)!important}
+
+/* WB selector */
+.wb-row{display:flex;gap:5px;margin-bottom:8px;flex-wrap:wrap}
+.wb-opt{font-size:9px;font-weight:600;color:var(--text3);padding:3px 7px;border-radius:4px;border:1px solid rgba(255,255,255,0.07);background:none;cursor:pointer;transition:all .12s;letter-spacing:.3px}
+.wb-opt:hover{color:var(--text2)}
+.wb-opt.on{background:var(--ink4);color:var(--text);border-color:rgba(255,255,255,0.15)}
+
+/* Sub-divider */
+.sl-divider{height:1px;background:rgba(255,255,255,0.04);margin:6px 0}
+.sl-group-lbl{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:6px 0 4px}
+
+/* Tone Curve */
+.curve-tabs{display:flex;gap:3px;margin-bottom:8px}
+.ctab{font-size:9px;font-weight:600;color:var(--text3);padding:3px 9px;border-radius:4px;border:1px solid rgba(255,255,255,0.07);background:none;cursor:pointer;transition:all .12s}
+.ctab.on{background:var(--ink4);color:var(--text)}
+.ctab.r.on{color:#F87171}.ctab.g.on{color:#4ADE80}.ctab.b.on{color:#60A5FA}
+.curve-box{height:124px;background:var(--ink3);border-radius:7px;border:1px solid rgba(255,255,255,0.06);position:relative;overflow:hidden;cursor:crosshair}
+.curve-box svg{width:100%;height:100%}
+.curve-region-sliders{margin-top:10px;display:flex;flex-direction:column;gap:0}
+
+/* HSL tabs */
+.hsl-tabs{display:flex;margin-bottom:10px;background:var(--ink3);border-radius:6px;padding:3px;gap:2px}
+.hsl-tab{flex:1;font-size:10px;font-weight:600;color:var(--text3);padding:4px;border:none;background:none;border-radius:4px;cursor:pointer;transition:all .12s}
+.hsl-tab.on{background:var(--ink5);color:var(--text)}
+.hsl-color-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.hsl-dot{width:26px;height:18px;border-radius:4px;cursor:pointer;border:2px solid transparent;transition:all .12s}
+.hsl-dot.on{border-color:rgba(255,255,255,.7);transform:scale(1.1)}
+/* TAT indicator */
+.tat-hint{font-size:9px;color:var(--text3);display:flex;align-items:center;gap:4px;margin-bottom:8px}
+.tat-icon-sm{width:14px;height:14px;border-radius:50%;border:2px solid var(--gold);display:inline-flex;align-items:center;justify-content:center}
+.tat-icon-sm::after{content:'';width:4px;height:4px;border-radius:50%;background:var(--gold)}
+
+/* Color Grading wheels */
+.cg-wheels{display:flex;gap:8px;margin-bottom:10px}
+.cg-wheel{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px}
+.cg-wheel-name{font-size:8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3)}
+.wheel{width:68px;height:68px;border-radius:50%;position:relative;cursor:crosshair;flex-shrink:0;
+  background:conic-gradient(hsl(0,80%,50%),hsl(30,80%,50%),hsl(60,80%,50%),hsl(90,80%,50%),hsl(120,80%,50%),hsl(150,80%,50%),hsl(180,80%,50%),hsl(210,80%,50%),hsl(240,80%,50%),hsl(270,80%,50%),hsl(300,80%,50%),hsl(330,80%,50%),hsl(360,80%,50%));
+  border:1px solid rgba(255,255,255,0.1)}
+.wheel::after{content:'';position:absolute;inset:4px;border-radius:50%;background:radial-gradient(white 0%,transparent 100%);opacity:.7;pointer-events:none}
+.wheel-cursor{position:absolute;width:8px;height:8px;border-radius:50%;background:white;border:1.5px solid rgba(0,0,0,.4);box-shadow:0 1px 4px rgba(0,0,0,.5);pointer-events:none;transform:translate(-50%,-50%)}
+.cg-lum-row{display:flex;flex-direction:column;gap:3px}
+.cg-lum-lbl{font-size:8px;color:var(--text3);letter-spacing:.5px;text-align:center}
+
+/* Detail */
+.detail-sub{font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin:8px 0 5px}
+
+/* Presets panel (left side on grade page) */
+.presets-bar{width:180px;background:var(--ink2);border-right:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.presets-hd{padding:10px 12px 8px;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);border-bottom:1px solid rgba(255,255,255,0.04)}
+.presets-scroll{flex:1;overflow-y:auto;padding:6px}
+.presets-scroll::-webkit-scrollbar{width:3px}
+.presets-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.07);border-radius:3px}
+.pr-group-lbl{font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:8px 6px 4px}
+.pr-item{padding:7px 8px;border-radius:6px;border:1px solid transparent;cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:7px}
+.pr-item:hover{background:var(--ink3)}
+.pr-item.on{background:var(--gold-d);border-color:rgba(197,164,106,.2)}
+.pr-swatch{width:24px;height:16px;border-radius:3px;flex-shrink:0}
+.pr-name{font-size:10px;font-weight:500;color:var(--text2)}
+.pr-item.on .pr-name{color:var(--gold)}
+
+/* Sync / copy row */
+.sync-row{padding:10px 12px;border-top:1px solid rgba(255,255,255,0.04);display:flex;gap:5px}
+.sync-btn{flex:1;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:none;color:var(--text2);font-size:10px;font-weight:600;cursor:pointer;transition:all .12s}
+.sync-btn:hover{background:var(--glass);color:var(--text)}
+.sync-btn.gold{background:var(--gold);color:#0B0B0E;border-color:transparent}
+.sync-btn.gold:hover{filter:brightness(1.1)}
+
+/* statusbar */
+.sbar2{height:28px;background:var(--ink2);border-top:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;padding:0 14px;flex-shrink:0}
+.si{font-size:10px;font-family:var(--mono);color:var(--text3);display:flex;align-items:center;gap:4px}
+.sdot{width:5px;height:5px;border-radius:50%;background:var(--ok)}
+.ssep{width:1px;height:12px;background:rgba(255,255,255,0.05);margin:0 10px}
+
+/* ─ Main page right panel tabs ─ */
+.rp-tabs{display:flex;border-bottom:1px solid rgba(255,255,255,0.05);padding:0 4px}
+.rp-tab{flex:1;padding:10px 4px;font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--text3);text-align:center;cursor:pointer;border:none;background:none;transition:all .12s;position:relative}
+.rp-tab::after{content:'';position:absolute;bottom:0;left:20%;right:20%;height:2px;background:var(--gold);border-radius:2px 2px 0 0;opacity:0;transition:opacity .12s}
+.rp-tab.on{color:var(--text)}
+.rp-tab.on::after{opacity:1}
+.rp-scroll{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:16px}
+.rp-scroll::-webkit-scrollbar{width:3px}
+.rp-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.07);border-radius:3px}
+
+/* ratio grid */
+.ratio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.rc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:9px 4px;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:var(--ink3);cursor:pointer;transition:all .12s}
+.rc:hover{border-color:rgba(255,255,255,0.18)}
+.rc.on{border-color:var(--gold);background:var(--gold-d)}
+.rc-r{border:1.5px solid currentColor;color:rgba(255,255,255,.2);border-radius:1px}
+.rc.on .rc-r{color:var(--gold)}
+.rc-l{font-size:9px;font-weight:600;color:var(--text3);font-family:var(--mono)}
+.rc.on .rc-l{color:var(--gold)}
+
+/* brand grid */
+.bgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.bc{padding:6px 3px;border-radius:5px;border:1px solid rgba(255,255,255,0.07);background:var(--ink3);font-size:9px;font-weight:600;color:var(--text3);text-align:center;cursor:pointer;transition:all .12s}
+.bc:hover{color:var(--text2)}
+.bc.on{background:var(--gold-d);color:var(--gold);border-color:rgba(197,164,106,.3)}
+
+/* seg */
+.seg{display:flex;background:var(--ink3);border-radius:5px;padding:3px;gap:2px}
+.sg{flex:1;padding:4px;border-radius:4px;border:none;background:none;font-size:9px;font-weight:600;color:var(--text3);cursor:pointer;transition:all .12s}
+.sg.on{background:var(--ink5);color:var(--text)}
+
+/* swatch */
+.swatches{display:flex;gap:5px;flex-wrap:wrap}
+.sw{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .12s}
+.sw.on{border-color:rgba(255,255,255,.8);transform:scale(1.15)}
+
+/* export btn */
+.exp-btn{width:100%;padding:10px;border-radius:7px;border:none;background:var(--gold);color:#0B0B0E;font-family:var(--sans);font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.exp-btn:hover{filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 8px 24px rgba(197,164,106,.3)}
+.ghost-btn{width:100%;padding:8px;border-radius:7px;border:1px solid rgba(255,255,255,0.1);background:none;color:var(--text2);font-family:var(--sans);font-size:10px;font-weight:500;cursor:pointer;transition:all .12s}
+.ghost-btn:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
+.sec-lbl{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);margin-bottom:7px}
+
+/* lut list */
+.lut-list{display:flex;flex-direction:column;gap:3px}
+.li{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;border:1px solid transparent;cursor:pointer;transition:all .12s}
+.li:hover{background:var(--ink3)}
+.li.on{background:var(--gold-d);border-color:rgba(197,164,106,.2)}
+.li-sw{width:26px;height:18px;border-radius:3px;flex-shrink:0}
+.li-name{flex:1;font-size:10px;font-weight:500;color:var(--text2)}
+.li-tag{font-size:9px;font-family:var(--mono);color:var(--text3)}
+.li.on .li-name{color:var(--gold)}
+
+/* note */
+.note{font-size:11px;color:#444;letter-spacing:.5px;text-align:center}
+
+/* Batch modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;z-index:200}
+.overlay.on{display:flex}
+.modal{background:var(--ink2);border:1px solid rgba(255,255,255,0.08);border-radius:14px;width:520px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 40px 120px rgba(0,0,0,.8)}
+.modal-hd{padding:18px 20px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.05)}
+.modal-title{font-size:13px;font-weight:600;color:var(--text)}
+.modal-x{width:26px;height:26px;border-radius:50%;background:var(--ink3);border:none;color:var(--text2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.modal-body{padding:18px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.prog-track{height:3px;background:var(--ink4);border-radius:3px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--gold),#E8C88A);border-radius:3px}
+.bi{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:var(--ink3);border:1px solid transparent}
+.bi.proc{border-color:rgba(197,164,106,.25);background:var(--gold-g)}
+.bi-thumb{width:40px;height:40px;border-radius:4px;overflow:hidden;flex-shrink:0}
+.bi-bg{width:100%;height:100%}
+.bi-info{flex:1}
+.bi-name{font-size:11px;font-weight:600;color:var(--text);font-family:var(--mono)}
+.bi-meta{font-size:9px;color:var(--text3);margin-top:1px}
+.badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px}
+.bd{background:rgba(74,222,128,.12);color:#4ADE80}
+.bw{background:var(--ink4);color:var(--text3)}
+.ba2{background:rgba(197,164,106,.15);color:var(--gold)}
+.modal-ft{padding:14px 20px;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:8px}
+
+/* ─ Scope viewer ─ */
+.scope-bar{display:flex;gap:2px;padding:5px 10px 4px;background:var(--ink2);border-bottom:1px solid rgba(255,255,255,0.04);align-items:center}
+.scope-btn{font-size:9px;font-family:var(--mono);font-weight:600;color:var(--text3);padding:2px 8px;border:1px solid rgba(255,255,255,0.07);border-radius:3px;cursor:pointer;background:none;letter-spacing:.5px;transition:all .1s}
+.scope-btn.active{color:var(--gold);border-color:rgba(197,164,106,.4);background:var(--gold-g)}
+.scope-view{display:none;width:100%;position:relative;overflow:hidden}
+.scope-view.active{display:block}
+.scope-view svg{display:block}
+
+/* ─ Color Grading DaVinci enhancements ─ */
+.cg-mode-toggle{display:flex;gap:3px;margin-bottom:8px;justify-content:flex-end;align-items:center}
+.cg-mode-lbl{font-size:8px;color:var(--text3);margin-right:auto;letter-spacing:.5px}
+.cg-mode-btn{font-size:9px;font-family:var(--mono);font-weight:600;color:var(--text3);padding:2px 8px;border:1px solid rgba(255,255,255,0.07);border-radius:3px;cursor:pointer;background:none;letter-spacing:.5px;transition:all .1s}
+.cg-mode-btn.active{color:var(--gold);border-color:rgba(197,164,106,.4);background:var(--gold-g)}
+.cg-readout{display:flex;gap:4px;justify-content:center;margin-top:4px}
+.cg-read-field{display:flex;flex-direction:column;align-items:center;gap:1px}
+.cg-read-lbl{font-size:7px;font-family:var(--mono);color:var(--text3);letter-spacing:.5px}
+.cg-read-val{font-size:9px;font-family:var(--mono);color:var(--text2);min-width:20px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:1px}
+.cg-wheel-reset{font-size:9px;font-family:var(--mono);color:transparent;cursor:pointer;transition:color .1s;margin-top:2px;text-align:center;display:block}
+.cg-wheel:hover .cg-wheel-reset{color:var(--text3)}
+.cg-wheel-reset:hover{color:var(--text)!important}
+.cg-sat-row{display:flex;align-items:center;gap:4px;width:100%;margin-top:4px}
+.cg-sat-lbl{font-size:7px;font-family:var(--mono);color:var(--text3);flex-shrink:0;letter-spacing:.5px}
+.davinci-badge{font-size:8px;font-weight:600;color:rgba(197,164,106,0.45);letter-spacing:.3px;margin-left:5px;font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<div class="p-nav">
+  <button class="p-tab on" onclick="showPage('main')">主視窗</button>
+  <button class="p-tab" onclick="showPage('grade')">調色 Develop</button>
+  <button class="p-tab" onclick="showPage('preset')">預設</button>
+  <button class="p-tab" onclick="showModal('batch')">批次匯出</button>
+</div>
+
+<!-- ═══════ PAGE: MAIN ═══════ -->
+<div class="app"><div class="page on" id="pg-main">
+
+  <div class="tbar">
+    <div class="tlights"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+    <div class="tpl-sw" style="margin-left:16px">
+      <button class="tpl-btn on" onclick="setTpl(this,'c','main')">Classic</button>
+      <button class="tpl-btn" onclick="setTpl(this,'r','main')">Rounded</button>
+      <button class="tpl-btn" onclick="setTpl(this,'s','main')">Split</button>
+    </div>
+    <span class="tbar-title">PicLab</span>
+    <div class="tbar-right">
+      <button class="tbtn" onclick="showModal('batch')">Batch (6)</button>
+      <button class="tbtn gold" onclick="alert('Export!')">
+        <svg class="ic" style="width:11px;height:11px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Export
+      </button>
+    </div>
+  </div>
+
+  <div class="lay">
+    <div class="sbar">
+      <button class="sb on"><div class="tt">圖庫</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></button>
+      <button class="sb" onclick="showPage('grade')"><div class="tt">調色</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M12 22C6.49 22 2 17.52 2 12S6.49 2 12 2c5.52 0 10 4.48 10 10 0 2.76-2.24 5-5 5h-1.5a2 2 0 00-2 2c0 .55.22 1.05.59 1.41A2 2 0 0115 22z"/></svg></button>
+      <button class="sb"><div class="tt">LUT</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg></button>
+      <div class="sb-sep"></div>
+      <button class="sb"><div class="tt">邊框</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2"/><rect x="7" y="7" width="10" height="10"/></svg></button>
+      <button class="sb"><div class="tt">品牌</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5"/></svg></button>
+      <button class="sb" onclick="showPage('preset')"><div class="tt">預設</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/></svg></button>
+      <div class="sb-sp"></div>
+      <button class="sb"><div class="tt">設定</div><svg class="ic" style="width:15px;height:15px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg></button>
+    </div>
+
+    <div class="prev">
+      <div class="prev-tb">
+        <div class="zgrp">
+          <button class="zbtn">−</button><span class="zlbl">100%</span><button class="zbtn">+</button>
+          <button class="zbtn" style="width:auto;padding:0 6px;font-size:9px;letter-spacing:.5px;font-family:var(--mono)">FIT</button>
+        </div>
+        <div class="tb-sep"></div>
+        <div class="itag-r">
+          <span class="itag" id="m-tpl-tag">Classic</span>
+          <span class="itag">4:3</span>
+          <span class="itag g">Velvia 100</span>
+        </div>
+      </div>
+      <div class="canv" id="canv-main">
+        <!-- Classic -->
+        <div class="mock-c" id="mc-c" style="display:flex">
+          <div class="photo-img"><div class="photo-grain"></div>
+            <div style="position:absolute;bottom:10px;left:10px;font-size:8px;font-family:var(--mono);color:rgba(255,255,255,.2);letter-spacing:1px">35mm · f/1.4 · RAW</div>
+          </div>
+          <div class="exif-strip">
+            <div style="display:flex;align-items:center"><div class="brand-badge">SONY</div><div class="cam-info"><div class="cam-model">A7R V</div><div class="cam-lens">FE 35mm f/1.4 GM</div></div></div>
+            <div class="exif-r"><div class="exif-p">f/1.4 · 1/2000s · ISO 100</div><div class="exif-s">35mm · RAW</div></div>
+          </div>
+          <div class="hist-float"><div class="hb r" style="height:18%"></div><div class="hb" style="height:35%"></div><div class="hb" style="height:62%"></div><div class="hb" style="height:90%"></div><div class="hb g" style="height:100%"></div><div class="hb g" style="height:78%"></div><div class="hb b" style="height:55%"></div><div class="hb b" style="height:30%"></div><div class="hb" style="height:12%"></div></div>
+        </div>
+        <!-- Rounded -->
+        <div class="mock-r" id="mc-r" style="display:none">
+          <div class="photo-r"><div class="photo-grain"></div></div>
+          <div class="exif-strip" style="padding:10px 0 0">
+            <div style="display:flex;align-items:center"><div class="brand-badge">SONY</div><div class="cam-info"><div class="cam-model">A7R V</div><div class="cam-lens">FE 35mm f/1.4 GM</div></div></div>
+            <div class="exif-r"><div class="exif-p">f/1.4 · ISO 100</div></div>
+          </div>
+        </div>
+        <!-- Split -->
+        <div class="mock-s" id="mc-s" style="display:none">
+          <div class="split-l">
+            <div class="brand-badge" style="width:fit-content">SONY</div>
+            <div class="split-params">
+              <div><div class="sp-lbl">Aperture</div><div class="sp-val">f/1.4</div></div>
+              <div><div class="sp-lbl">Shutter</div><div class="sp-val">1/2000</div></div>
+              <div><div class="sp-lbl">ISO</div><div class="sp-val">100</div></div>
+              <div><div class="sp-lbl">Focal</div><div class="sp-val">35mm</div></div>
+            </div>
+          </div>
+          <div class="split-r"><div class="photo-grain"></div></div>
+        </div>
+      </div>
+      <div class="film">
+        <div class="fi on"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#2C241A,#0F0D08)"></div></div><div class="fi-meta"><span class="fi-flag pick">P</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#1A2C1A,#0F1A0F)"></div></div><div class="fi-meta"><span class="fi-flag pick">P</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#2A1E12,#1A1208)"></div></div><div class="fi-meta"><span class="fi-flag">◻</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star">★</span><span class="fi-star">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#12182A,#0A1018)"></div></div><div class="fi-meta"><span class="fi-flag rej">✗</span><div class="fi-stars"><span class="fi-star">★</span><span class="fi-star">★</span><span class="fi-star">★</span><span class="fi-star">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#2A1220,#1A0810)"></div></div><div class="fi-meta"><span class="fi-flag pick">P</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span></div></div></div>
+        <div class="fi-add">+</div>
+      </div>
+    </div>
+
+    <!-- Main right panel -->
+    <div class="rpanel">
+      <div class="rp-tabs">
+        <button class="rp-tab on" onclick="setRpTab(this,'rt-edit')">編輯</button>
+        <button class="rp-tab" onclick="setRpTab(this,'rt-border')">邊框</button>
+        <button class="rp-tab" onclick="setRpTab(this,'rt-brand')">品牌</button>
+        <button class="rp-tab" onclick="setRpTab(this,'rt-export')">匯出</button>
+      </div>
+      <div class="rp-scroll" id="rt-edit">
+        <div><div class="sec-lbl">輸出比例</div>
+          <div class="ratio-grid">
+            <div class="rc" onclick="setRc(this)"><div class="rc-r" style="width:18px;height:18px"></div><div class="rc-l">1:1</div></div>
+            <div class="rc on" onclick="setRc(this)"><div class="rc-r" style="width:22px;height:16px"></div><div class="rc-l">4:3</div></div>
+            <div class="rc" onclick="setRc(this)"><div class="rc-r" style="width:24px;height:14px"></div><div class="rc-l">16:9</div></div>
+            <div class="rc" onclick="setRc(this)"><div class="rc-r" style="width:16px;height:22px"></div><div class="rc-l">3:4</div></div>
+            <div class="rc" onclick="setRc(this)"><div class="rc-r" style="width:13px;height:22px"></div><div class="rc-l">9:16</div></div>
+            <div class="rc" onclick="setRc(this)"><div class="rc-r" style="width:16px;height:20px"></div><div class="rc-l">4:5</div></div>
+          </div>
+        </div>
+        <div><div class="sec-lbl">LUT 底片</div>
+          <div class="lut-list">
+            <div class="li on"><div class="li-sw" style="background:linear-gradient(90deg,#C5902A,#E8B86D)"></div><div class="li-name">Velvia 100</div><div class="li-tag">Fuji</div></div>
+            <div class="li"><div class="li-sw" style="background:linear-gradient(90deg,#8898B8,#C0CCDE)"></div><div class="li-name">Provia 100F</div><div class="li-tag">Fuji</div></div>
+            <div class="li"><div class="li-sw" style="background:linear-gradient(90deg,#446644,#88AA88)"></div><div class="li-name">Acros Green</div><div class="li-tag">B&W</div></div>
+          </div>
+        </div>
+        <button class="exp-btn" onclick="showPage('grade')">
+          <svg class="ic" style="width:12px;height:12px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          進入調色 Develop →
+        </button>
+      </div>
+      <div class="rp-scroll" id="rt-border" style="display:none">
+        <div class="sec-lbl">邊框大小</div>
+        <div class="slrow"><span class="sl-lbl">邊框</span><input type="range" class="sl" min="0" max="30" value="15" oninput="uv(this,'v-bdr',v=>v+'%')"><span class="sl-val" id="v-bdr">15%</span><span class="sl-reset" onclick="rv(this,15,'v-bdr',v=>v+'%')">↺</span></div>
+        <div style="height:12px"></div>
+        <div class="sec-lbl">邊框顏色</div>
+        <div class="swatches">
+          <div class="sw on" style="background:#fff" onclick="setSw(this)"></div>
+          <div class="sw" style="background:#F5F0E8" onclick="setSw(this)"></div>
+          <div class="sw" style="background:#1A1A1A" onclick="setSw(this)"></div>
+          <div class="sw" style="background:#2C2C2C" onclick="setSw(this)"></div>
+          <div class="sw" style="background:var(--gold)" onclick="setSw(this)"></div>
+        </div>
+        <div style="height:12px"></div>
+        <div class="sec-lbl">IG 安全區</div>
+        <div class="seg"><button class="sg on" onclick="setSg(this)">顯示</button><button class="sg" onclick="setSg(this)">隱藏</button></div>
+      </div>
+      <div class="rp-scroll" id="rt-brand" style="display:none">
+        <div class="sec-lbl">相機品牌</div>
+        <div class="bgrid">
+          <div class="bc on" onclick="setBc(this)">Sony</div><div class="bc" onclick="setBc(this)">Canon</div>
+          <div class="bc" onclick="setBc(this)">Nikon</div><div class="bc" onclick="setBc(this)">Fuji</div>
+          <div class="bc" onclick="setBc(this)">Leica</div><div class="bc" onclick="setBc(this)">Ricoh</div>
+          <div class="bc" onclick="setBc(this)">Olympus</div><div class="bc" onclick="setBc(this)">Auto</div>
+        </div>
+        <div style="height:12px"></div>
+        <div class="sec-lbl">Logo 樣式</div>
+        <div class="seg"><button class="sg on" onclick="setSg(this)">彩色</button><button class="sg" onclick="setSg(this)">白</button><button class="sg" onclick="setSg(this)">黑</button></div>
+      </div>
+      <div class="rp-scroll" id="rt-export" style="display:none">
+        <div class="sec-lbl">格式</div>
+        <div class="seg"><button class="sg on" onclick="setSg(this)">JPEG</button><button class="sg" onclick="setSg(this)">PNG</button><button class="sg" onclick="setSg(this)">WebP</button></div>
+        <div style="height:10px"></div>
+        <div class="slrow"><span class="sl-lbl">品質</span><input type="range" class="sl" min="60" max="100" value="92" oninput="uv(this,'v-q',v=>v)"><span class="sl-val" id="v-q">92</span><span class="sl-reset" onclick="rv(this,92,'v-q',v=>v)">↺</span></div>
+        <div style="height:12px"></div>
+        <button class="exp-btn">
+          <svg class="ic" style="width:11px;height:11px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>匯出此張
+        </button>
+        <button class="ghost-btn" onclick="showModal('batch')">批次匯出全部 (6)</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="sbar2">
+    <div class="si"><div class="sdot"></div>就緒</div>
+    <div class="ssep"></div><div class="si">5 張</div>
+    <div class="ssep"></div><div class="si">Sony A7R V · FE 35mm f/1.4 GM</div>
+    <div style="margin-left:auto" class="si">Velvia 100 · 4032×3024</div>
+  </div>
+</div></div><!-- /main page -->
+
+
+<!-- ═══════ PAGE: DEVELOP (Grade) ═══════ -->
+<div class="app" style="margin-top:0"><div class="page" id="pg-grade">
+
+  <div class="tbar">
+    <div class="tlights"><div class="tl tl-r"></div><div class="tl tl-y"></div><div class="tl tl-g"></div></div>
+    <div class="tpl-sw" style="margin-left:16px">
+      <button class="tpl-btn on" onclick="setTpl(this,'c','grade')">Classic</button>
+      <button class="tpl-btn" onclick="setTpl(this,'r','grade')">Rounded</button>
+      <button class="tpl-btn" onclick="setTpl(this,'s','grade')">Split</button>
+    </div>
+    <span class="tbar-title">PicLab — Develop</span>
+    <div class="tbar-right">
+      <button class="tbtn" onclick="showPage('main')">← Library</button>
+      <button class="tbtn gold">Export</button>
+    </div>
+  </div>
+
+  <div class="lay">
+    <!-- Presets sidebar (left, LRC-style) -->
+    <div class="presets-bar">
+      <div class="presets-hd">Presets</div>
+      <div class="presets-scroll">
+        <div class="pr-group-lbl">我的預設</div>
+        <div class="pr-item on" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#C5902A,#F0D090)"></div><div class="pr-name">晨光暖調</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#1A3A6A,#70A0D0)"></div><div class="pr-name">冷藍清晨</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#1A3A1A,#70AA70)"></div><div class="pr-name">森林綠調</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#111,#999)"></div><div class="pr-name">高對比黑白</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#6A1A1A,#E0702A)"></div><div class="pr-name">夕陽橘紅</div></div>
+        <div class="pr-group-lbl">LUT 底片</div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#C5902A,#E8B86D)"></div><div class="pr-name">Velvia 100</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#8898B8,#C0CCDE)"></div><div class="pr-name">Provia 100F</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#446644,#88AA88)"></div><div class="pr-name">Acros Green</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#6B3A1A,#B87040)"></div><div class="pr-name">Eterna Cinema</div></div>
+        <div class="pr-item" onclick="setPr(this)"><div class="pr-swatch" style="background:linear-gradient(90deg,#5C4A8A,#A090CC)"></div><div class="pr-name">Classic Chrome</div></div>
+      </div>
+      <div class="sync-row">
+        <button class="sync-btn" onclick="alert('複製設定')">Copy</button>
+        <button class="sync-btn" onclick="alert('貼上設定')">Paste</button>
+        <button class="sync-btn gold" onclick="alert('同步至全部')">Sync</button>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="prev">
+      <!-- Develop toolbar -->
+      <div class="dev-tb">
+        <!-- Crop -->
+        <button class="dtool on"><div class="tt">裁切</div><svg class="ic" style="width:13px;height:13px" viewBox="0 0 24 24"><path d="M6 2v14h14"/><path d="M18 22V8H4"/></svg></button>
+        <!-- TAT -->
+        <button class="dtool" id="tat-btn" onclick="toggleTat(this)">
+          <div class="tt">目標調整工具 (TAT)</div>
+          <svg class="ic" style="width:13px;height:13px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+        </button>
+        <!-- Eyedropper WB -->
+        <button class="dtool"><div class="tt">白平衡滴管</div><svg class="ic" style="width:13px;height:13px" viewBox="0 0 24 24"><path d="M12 2L2 12l5 5 1-1 9-9-5-5zM18 14s-4 4-4 6a4 4 0 008 0c0-2-4-6-4-6z"/></svg></button>
+        <div class="dtool-sep"></div>
+        <!-- Clipping toggle -->
+        <button class="dtool" onclick="this.classList.toggle('on')"><div class="tt">溢位警告</div><svg class="ic" style="width:13px;height:13px" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></button>
+        <!-- Info overlay -->
+        <button class="dtool" onclick="this.classList.toggle('on')"><div class="tt">EXIF 疊加</div><svg class="ic" style="width:13px;height:13px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></button>
+
+        <!-- Before/After -->
+        <button class="ba-btn on" id="ba-btn" onclick="toggleBA(this)">Before / After  \Y</button>
+      </div>
+
+      <div class="canv" id="canv-grade" style="position:relative">
+        <!-- Classic (with before/after split) -->
+        <div id="gc-c" style="position:relative;display:flex;flex-direction:column">
+          <div style="position:relative">
+            <div class="photo-img ba-after" style="width:380px;height:285px">
+              <div class="photo-grain"></div>
+              <!-- BA split line -->
+              <div class="ba-split" id="ba-line" style="display:flex">
+                <span class="ba-label" style="left:-36px">BEFORE</span>
+                <span class="ba-label" style="right:-32px;left:auto">AFTER</span>
+              </div>
+              <!-- Clipping warnings -->
+              <div class="clip-ind left"><div class="clip-dot warn">▲</div></div>
+              <div class="clip-ind right"><div class="clip-dot">▼</div></div>
+            </div>
+          </div>
+          <div class="exif-strip">
+            <div style="display:flex;align-items:center"><div class="brand-badge">SONY</div><div class="cam-info"><div class="cam-model">A7R V</div><div class="cam-lens">FE 35mm f/1.4 GM</div></div></div>
+            <div class="exif-r"><div class="exif-p">f/1.4 · 1/2000s · ISO 100</div><div class="exif-s">35mm · RAW · Velvia 100</div></div>
+          </div>
+          <div class="hist-float"><div class="hb r" style="height:15%"></div><div class="hb" style="height:38%"></div><div class="hb" style="height:70%"></div><div class="hb g" style="height:100%"></div><div class="hb g" style="height:88%"></div><div class="hb b" style="height:65%"></div><div class="hb b" style="height:40%"></div><div class="hb" style="height:18%"></div></div>
+        </div>
+        <!-- Rounded -->
+        <div class="mock-r" id="gc-r" style="display:none"><div class="photo-r ba-after"><div class="photo-grain"></div></div><div class="exif-strip" style="padding:10px 0 0"><div style="display:flex;align-items:center"><div class="brand-badge">SONY</div><div class="cam-info"><div class="cam-model">A7R V</div></div></div><div class="exif-r"><div class="exif-p">f/1.4 · ISO 100</div></div></div></div>
+        <!-- Split -->
+        <div class="mock-s" id="gc-s" style="display:none"><div class="split-l"><div class="brand-badge" style="width:fit-content">SONY</div><div class="split-params"><div><div class="sp-lbl">Aperture</div><div class="sp-val">f/1.4</div></div><div><div class="sp-lbl">Shutter</div><div class="sp-val">1/2000</div></div><div><div class="sp-lbl">ISO</div><div class="sp-val">100</div></div></div></div><div class="split-r ba-after"><div class="photo-grain"></div></div></div>
+      </div>
+
+      <div class="film">
+        <div class="fi on"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#2C241A,#0F0D08)"></div></div><div class="fi-meta"><span class="fi-flag pick">P</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#1A2C1A,#0F1A0F)"></div></div><div class="fi-meta"><span class="fi-flag pick">P</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi"><div class="fi-thumb"><div class="fi-bg" style="background:linear-gradient(135deg,#2A1E12,#1A1208)"></div></div><div class="fi-meta"><span class="fi-flag">◻</span><div class="fi-stars"><span class="fi-star on">★</span><span class="fi-star on">★</span><span class="fi-star">★</span><span class="fi-star">★</span><span class="fi-star">★</span></div></div></div>
+        <div class="fi-add">+</div>
+      </div>
+    </div>
+
+    <!-- Develop right panel — LRC-style collapsible -->
+    <div class="rpanel" style="width:255px">
+
+      <!-- Navigator -->
+      <div class="nav-box">
+        <div class="nav-prev">
+          <div class="photo-grain"></div>
+          <div class="nav-frame" style="top:20%;left:15%;width:50%;height:50%"></div>
+        </div>
+        <div class="nav-zooms">
+          <span class="nz on" onclick="setNz(this)">FIT</span>
+          <span class="nz" onclick="setNz(this)">FILL</span>
+          <span class="nz" onclick="setNz(this)">1:1</span>
+          <span class="nz" onclick="setNz(this)">3:1</span>
+        </div>
+      </div>
+
+      <!-- Scope Viewer (DaVinci-style switchable scopes) -->
+      <div style="border-bottom:1px solid rgba(255,255,255,0.04)">
+        <div class="scope-bar">
+          <button class="scope-btn active" onclick="setScope(this,'hist')">HIST</button>
+          <button class="scope-btn" onclick="setScope(this,'wave')">WAVE</button>
+          <button class="scope-btn" onclick="setScope(this,'parade')">PARADE</button>
+          <button class="scope-btn" onclick="setScope(this,'vect')">VECT</button>
+          <span style="margin-left:auto;font-size:8px;font-family:var(--mono);color:var(--text3);letter-spacing:.5px">Scopes</span>
+        </div>
+
+        <!-- HIST -->
+        <div class="scope-view active" id="sv-hist">
+          <div class="hist-canvas" id="hist-panel" style="border-radius:0;height:62px">
+            <div class="hist-zone" style="left:0%;width:20%">Blacks</div>
+            <div class="hist-zone" style="left:20%;width:20%">Shadows</div>
+            <div class="hist-zone" style="left:40%;width:20%">Midtones</div>
+            <div class="hist-zone" style="left:60%;width:20%">Highlights</div>
+            <div class="hist-zone" style="left:80%;width:20%">Whites</div>
+            <svg viewBox="0 0 246 62" preserveAspectRatio="none">
+              <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="rgba(248,113,113,0.4)"/><stop offset="50%" stop-color="rgba(255,255,255,0.5)"/><stop offset="100%" stop-color="rgba(96,165,250,0.4)"/></linearGradient></defs>
+              <path d="M0 62 L0 54 C20 54,25 42,40 31 C55 20,65 5,80 4 C95 3,100 12,115 10 C130 8,135 18,150 20 C165 22,170 38,185 45 C200 52,220 56,246 58 L246 62 Z" fill="url(#rg)" opacity="0.7"/>
+              <path d="M0 54 C20 54,25 42,40 31 C55 20,65 5,80 4 C95 3,100 12,115 10 C130 8,135 18,150 20 C165 22,170 38,185 45 C200 52,220 56,246 58" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+            </svg>
+          </div>
+          <div class="hist-clips">
+            <span class="hist-clip warn" title="高光溢位">▲ Highlights</span>
+            <span class="hist-clip" style="font-size:9px;font-family:var(--mono);color:var(--text3)">f/1.4 · ISO 100</span>
+            <span class="hist-clip">▼ Blacks</span>
+          </div>
+        </div>
+
+        <!-- WAVE -->
+        <div class="scope-view" id="sv-wave">
+          <svg width="100%" height="72" viewBox="0 0 231 72" preserveAspectRatio="none">
+            <rect width="231" height="72" fill="#0D0D14"/>
+            <line x1="0" y1="18" x2="231" y2="18" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+            <line x1="0" y1="36" x2="231" y2="36" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+            <line x1="0" y1="54" x2="231" y2="54" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+            <text x="3" y="16" font-size="5" fill="rgba(255,255,255,0.18)" font-family="monospace">100</text>
+            <text x="3" y="52" font-size="5" fill="rgba(255,255,255,0.18)" font-family="monospace">50</text>
+            <text x="3" y="70" font-size="5" fill="rgba(255,255,255,0.18)" font-family="monospace">0</text>
+            <polyline points="0,55 18,49 36,41 52,28 66,14 80,8 96,10 110,16 124,22 138,30 152,38 166,46 180,52 196,56 212,58 231,60" fill="none" stroke="rgba(197,164,106,0.7)" stroke-width="1.5"/>
+            <polyline points="0,57 14,52 28,46 44,36 58,25 74,12 88,17 102,23 116,28 132,36 146,42 162,50 176,54 192,58 208,60 231,62" fill="none" stroke="rgba(197,164,106,0.25)" stroke-width="0.8"/>
+            <polygon points="0,72 0,55 18,49 36,41 52,28 66,14 80,8 96,10 110,16 124,22 138,30 152,38 166,46 180,52 196,56 212,58 231,60 231,72" fill="rgba(197,164,106,0.06)"/>
+            <text x="3" y="68" font-size="5" fill="rgba(197,164,106,0.4)" font-family="monospace">Luma Waveform</text>
+          </svg>
+        </div>
+
+        <!-- PARADE -->
+        <div class="scope-view" id="sv-parade">
+          <svg width="100%" height="72" viewBox="0 0 231 72" preserveAspectRatio="none">
+            <rect width="231" height="72" fill="#0D0D14"/>
+            <line x1="77" y1="0" x2="77" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+            <line x1="154" y1="0" x2="154" y2="72" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+            <line x1="0" y1="18" x2="77" y2="18" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>
+            <line x1="77" y1="18" x2="154" y2="18" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>
+            <line x1="154" y1="18" x2="231" y2="18" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>
+            <!-- R -->
+            <polyline points="2,64 14,54 26,42 38,25 50,12 62,7 77,9" fill="none" stroke="rgba(248,113,113,0.8)" stroke-width="1.3"/>
+            <polygon points="2,72 2,64 14,54 26,42 38,25 50,12 62,7 77,9 77,72" fill="rgba(248,113,113,0.07)"/>
+            <text x="34" y="70" font-size="6" fill="rgba(248,113,113,0.55)" font-family="monospace">R</text>
+            <!-- G -->
+            <polyline points="79,60 91,50 103,38 115,22 127,12 139,9 154,13" fill="none" stroke="rgba(74,222,128,0.8)" stroke-width="1.3"/>
+            <polygon points="79,72 79,60 91,50 103,38 115,22 127,12 139,9 154,13 154,72" fill="rgba(74,222,128,0.07)"/>
+            <text x="111" y="70" font-size="6" fill="rgba(74,222,128,0.55)" font-family="monospace">G</text>
+            <!-- B -->
+            <polyline points="156,62 168,53 180,44 192,31 204,19 216,13 231,17" fill="none" stroke="rgba(96,165,250,0.8)" stroke-width="1.3"/>
+            <polygon points="156,72 156,62 168,53 180,44 192,31 204,19 216,13 231,17 231,72" fill="rgba(96,165,250,0.07)"/>
+            <text x="188" y="70" font-size="6" fill="rgba(96,165,250,0.55)" font-family="monospace">B</text>
+            <text x="3" y="70" font-size="5" fill="rgba(255,255,255,0.15)" font-family="monospace">RGB Parade</text>
+          </svg>
+        </div>
+
+        <!-- VECT -->
+        <div class="scope-view" id="sv-vect">
+          <svg width="100%" height="78" viewBox="0 0 231 78">
+            <rect width="231" height="78" fill="#0D0D14"/>
+            <circle cx="115" cy="39" r="34" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="0.5"/>
+            <circle cx="115" cy="39" r="17" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+            <circle cx="115" cy="39" r="5"  fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="0.5"/>
+            <line x1="115" y1="5" x2="115" y2="73" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+            <line x1="81" y1="39" x2="149" y2="39" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+            <!-- skin tone line (75° from I-axis) -->
+            <line x1="115" y1="39" x2="143" y2="17" stroke="rgba(255,200,150,0.2)" stroke-width="0.8" stroke-dasharray="2,2"/>
+            <text x="144" y="16" font-size="5" fill="rgba(255,200,150,0.35)" font-family="monospace">skin</text>
+            <!-- color targets -->
+            <rect x="141" y="9"  width="5" height="5" fill="rgba(248,113,113,0.65)" rx="1"/>
+            <text x="148" y="14" font-size="5" fill="rgba(248,113,113,0.5)" font-family="monospace">R</text>
+            <rect x="80" y="9"  width="5" height="5" fill="rgba(251,191,36,0.65)" rx="1"/>
+            <text x="70" y="14" font-size="5" fill="rgba(251,191,36,0.5)" font-family="monospace">Cy</text>
+            <rect x="141" y="63" width="5" height="5" fill="rgba(74,222,128,0.65)" rx="1"/>
+            <text x="148" y="68" font-size="5" fill="rgba(74,222,128,0.5)" font-family="monospace">G</text>
+            <rect x="80" y="63" width="5" height="5" fill="rgba(96,165,250,0.65)" rx="1"/>
+            <text x="70" y="68" font-size="5" fill="rgba(96,165,250,0.5)" font-family="monospace">Mg</text>
+            <!-- signal cluster (warm image, slightly shifted toward warm) -->
+            <ellipse cx="120" cy="37" rx="6" ry="4" fill="rgba(197,164,106,0.3)"/>
+            <circle cx="118" cy="36" r="2.5" fill="rgba(255,255,255,0.45)"/>
+            <circle cx="121" cy="38" r="1.5" fill="rgba(197,164,106,0.75)"/>
+            <text x="3" y="73" font-size="5" fill="rgba(255,255,255,0.15)" font-family="monospace">Vectorscope</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Scrollable panel sections -->
+      <div class="psections">
+
+        <!-- BASIC -->
+        <div class="psec" id="sec-basic">
+          <div class="psec-hd" onclick="toggleSec('sec-basic')">
+            <span class="psec-tri">▼</span><span class="psec-name">Basic</span>
+            <button class="psec-auto" onclick="event.stopPropagation();alert('Auto 分析中…')">Auto</button>
+          </div>
+          <div class="psec-body">
+            <div class="sl-group-lbl">White Balance</div>
+            <div class="wb-row">
+              <button class="wb-opt" onclick="setWb(this)">As Shot</button>
+              <button class="wb-opt on" onclick="setWb(this)">Auto</button>
+              <button class="wb-opt" onclick="setWb(this)">Daylight</button>
+              <button class="wb-opt" onclick="setWb(this)">Cloudy</button>
+              <button class="wb-opt" onclick="setWb(this)">Custom</button>
+            </div>
+            <div class="slrow"><span class="sl-lbl">Temp</span><input type="range" class="sl" min="2000" max="10000" value="5500" oninput="uv(this,'v-temp',v=>v+'K')"><span class="sl-val" id="v-temp">5500K</span><span class="sl-reset" onclick="rv(this,5500,'v-temp',v=>v+'K')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Tint</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'v-tint',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-tint">0</span><span class="sl-reset" onclick="rv(this,0,'v-tint',v=>v)">↺</span></div>
+            <div class="sl-divider"></div>
+            <div class="sl-group-lbl">Tone</div>
+            <div class="slrow"><span class="sl-lbl">Exposure</span><input type="range" class="sl" min="-4" max="4" step="0.05" value="0.30" oninput="uv(this,'v-exp',v=>(+v>0?'+':'')+parseFloat(v).toFixed(2))"><span class="sl-val" id="v-exp">+0.30</span><span class="sl-reset" onclick="rv(this,0,'v-exp',v=>'0.00')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Contrast</span><input type="range" class="sl" min="-100" max="100" value="15" oninput="uv(this,'v-con',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-con">+15</span><span class="sl-reset" onclick="rv(this,0,'v-con',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Highlights</span><input type="range" class="sl" min="-100" max="100" value="-20" oninput="uv(this,'v-hi',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-hi">−20</span><span class="sl-reset" onclick="rv(this,0,'v-hi',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Shadows</span><input type="range" class="sl" min="-100" max="100" value="30" oninput="uv(this,'v-shd',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-shd">+30</span><span class="sl-reset" onclick="rv(this,0,'v-shd',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Whites</span><input type="range" class="sl" min="-100" max="100" value="10" oninput="uv(this,'v-wh',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-wh">+10</span><span class="sl-reset" onclick="rv(this,0,'v-wh',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Blacks</span><input type="range" class="sl" min="-100" max="100" value="-15" oninput="uv(this,'v-bl',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-bl">−15</span><span class="sl-reset" onclick="rv(this,0,'v-bl',v=>'0')">↺</span></div>
+            <div class="sl-divider"></div>
+            <div class="sl-group-lbl">Presence</div>
+            <div class="slrow"><span class="sl-lbl">Clarity</span><input type="range" class="sl" min="-100" max="100" value="20" oninput="uv(this,'v-cl',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-cl">+20</span><span class="sl-reset" onclick="rv(this,0,'v-cl',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Dehaze</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'v-dh',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-dh">0</span><span class="sl-reset" onclick="rv(this,0,'v-dh',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Vibrance</span><input type="range" class="sl" min="-100" max="100" value="25" oninput="uv(this,'v-vib',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-vib">+25</span><span class="sl-reset" onclick="rv(this,0,'v-vib',v=>'0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Saturation</span><input type="range" class="sl" min="-100" max="100" value="20" oninput="uv(this,'v-sat',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-sat">+20</span><span class="sl-reset" onclick="rv(this,0,'v-sat',v=>'0')">↺</span></div>
+          </div>
+        </div>
+
+        <!-- TONE CURVE -->
+        <div class="psec" id="sec-curve">
+          <div class="psec-hd" onclick="toggleSec('sec-curve')"><span class="psec-tri">▼</span><span class="psec-name">Tone Curve</span></div>
+          <div class="psec-body">
+            <div class="curve-tabs">
+              <button class="ctab on" onclick="setCtab(this)">Parametric</button>
+              <button class="ctab" onclick="setCtab(this)">Point</button>
+              <button class="ctab r" onclick="setCtab(this)">R</button>
+              <button class="ctab g" onclick="setCtab(this)">G</button>
+              <button class="ctab b" onclick="setCtab(this)">B</button>
+            </div>
+            <div class="curve-box">
+              <svg viewBox="0 0 231 124" preserveAspectRatio="none">
+                <defs><linearGradient id="cg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#000"/><stop offset="100%" stop-color="#fff"/></linearGradient></defs>
+                <rect width="231" height="124" fill="url(#cg)" opacity="0.05"/>
+                <line x1="0" y1="31" x2="231" y2="31" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+                <line x1="0" y1="62" x2="231" y2="62" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+                <line x1="0" y1="93" x2="231" y2="93" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+                <line x1="57.75" y1="0" x2="57.75" y2="124" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+                <line x1="115.5" y1="0" x2="115.5" y2="124" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+                <line x1="173.25" y1="0" x2="173.25" y2="124" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>
+                <line x1="0" y1="124" x2="231" y2="0" stroke="rgba(255,255,255,0.08)" stroke-width="0.5" stroke-dasharray="3,3"/>
+                <path d="M0 124 C50 118,80 72,115 50 C150 28,185 10,231 2" fill="none" stroke="rgba(197,164,106,0.85)" stroke-width="1.5"/>
+                <circle cx="80" cy="72" r="3.5" fill="#C5A46A"/>
+                <circle cx="160" cy="28" r="3.5" fill="#C5A46A"/>
+              </svg>
+            </div>
+            <div class="curve-region-sliders" style="margin-top:10px">
+              <div class="slrow"><span class="sl-lbl">Highlights</span><input type="range" class="sl" min="-100" max="100" value="8" oninput="uv(this,'v-ch',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-ch">+8</span><span class="sl-reset" onclick="rv(this,0,'v-ch',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl">Lights</span><input type="range" class="sl" min="-100" max="100" value="15" oninput="uv(this,'v-cl2',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-cl2">+15</span><span class="sl-reset" onclick="rv(this,0,'v-cl2',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl">Darks</span><input type="range" class="sl" min="-100" max="100" value="-5" oninput="uv(this,'v-cd',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-cd">−5</span><span class="sl-reset" onclick="rv(this,0,'v-cd',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl">Shadows</span><input type="range" class="sl" min="-100" max="100" value="-10" oninput="uv(this,'v-cs',v=>(v>0?'+':'')+v)"><span class="sl-val" id="v-cs">−10</span><span class="sl-reset" onclick="rv(this,0,'v-cs',v=>'0')">↺</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HSL -->
+        <div class="psec" id="sec-hsl">
+          <div class="psec-hd" onclick="toggleSec('sec-hsl')"><span class="psec-tri">▼</span><span class="psec-name">HSL / Color</span></div>
+          <div class="psec-body">
+            <div class="tat-hint">
+              <div class="tat-icon-sm"></div>
+              <span>點擊照片上的色彩拖曳調整</span>
+            </div>
+            <div class="hsl-tabs">
+              <button class="hsl-tab on" onclick="setHslTab(this,'hsl-h')">Hue</button>
+              <button class="hsl-tab" onclick="setHslTab(this,'hsl-s')">Saturation</button>
+              <button class="hsl-tab" onclick="setHslTab(this,'hsl-l')">Luminance</button>
+            </div>
+            <div class="hsl-color-row">
+              <div class="hsl-dot on" style="background:#e74c3c" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#e67e22" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#f1c40f" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#2ecc71" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#3498db" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#9b59b6" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#ff69b4" onclick="setHslDot(this)"></div>
+              <div class="hsl-dot" style="background:#95a5a6" onclick="setHslDot(this)"></div>
+            </div>
+            <div id="hsl-h">
+              <div class="slrow"><span class="sl-lbl" style="color:#e74c3c">Red</span><input type="range" class="sl" min="-30" max="30" value="0" oninput="uv(this,'hh-r',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hh-r">0</span><span class="sl-reset" onclick="rv(this,0,'hh-r',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#e67e22">Orange</span><input type="range" class="sl" min="-30" max="30" value="5" oninput="uv(this,'hh-o',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hh-o">+5</span><span class="sl-reset" onclick="rv(this,0,'hh-o',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#f1c40f">Yellow</span><input type="range" class="sl" min="-30" max="30" value="0" oninput="uv(this,'hh-y',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hh-y">0</span><span class="sl-reset" onclick="rv(this,0,'hh-y',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#2ecc71">Green</span><input type="range" class="sl" min="-30" max="30" value="0" oninput="uv(this,'hh-g',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hh-g">0</span><span class="sl-reset" onclick="rv(this,0,'hh-g',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#3498db">Blue</span><input type="range" class="sl" min="-30" max="30" value="0" oninput="uv(this,'hh-b',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hh-b">0</span><span class="sl-reset" onclick="rv(this,0,'hh-b',v=>'0')">↺</span></div>
+            </div>
+            <div id="hsl-s" style="display:none">
+              <div class="slrow"><span class="sl-lbl" style="color:#e74c3c">Red</span><input type="range" class="sl" min="-100" max="100" value="10" oninput="uv(this,'hs-r',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hs-r">+10</span><span class="sl-reset" onclick="rv(this,0,'hs-r',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#e67e22">Orange</span><input type="range" class="sl" min="-100" max="100" value="20" oninput="uv(this,'hs-o',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hs-o">+20</span><span class="sl-reset" onclick="rv(this,0,'hs-o',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#f1c40f">Yellow</span><input type="range" class="sl" min="-100" max="100" value="5" oninput="uv(this,'hs-y',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hs-y">+5</span><span class="sl-reset" onclick="rv(this,0,'hs-y',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#2ecc71">Green</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'hs-g',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hs-g">0</span><span class="sl-reset" onclick="rv(this,0,'hs-g',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#3498db">Blue</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'hs-b',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hs-b">0</span><span class="sl-reset" onclick="rv(this,0,'hs-b',v=>'0')">↺</span></div>
+            </div>
+            <div id="hsl-l" style="display:none">
+              <div class="slrow"><span class="sl-lbl" style="color:#e74c3c">Red</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'hl-r',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hl-r">0</span><span class="sl-reset" onclick="rv(this,0,'hl-r',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#e67e22">Orange</span><input type="range" class="sl" min="-100" max="100" value="-5" oninput="uv(this,'hl-o',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hl-o">−5</span><span class="sl-reset" onclick="rv(this,0,'hl-o',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#2ecc71">Green</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'hl-g',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hl-g">0</span><span class="sl-reset" onclick="rv(this,0,'hl-g',v=>'0')">↺</span></div>
+              <div class="slrow"><span class="sl-lbl" style="color:#3498db">Blue</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'hl-b',v=>(v>0?'+':'')+v)"><span class="sl-val" id="hl-b">0</span><span class="sl-reset" onclick="rv(this,0,'hl-b',v=>'0')">↺</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- COLOR GRADING (DaVinci-style) -->
+        <div class="psec" id="sec-cg">
+          <div class="psec-hd" onclick="toggleSec('sec-cg')">
+            <span class="psec-tri">▼</span>
+            <span class="psec-name">Color Grading</span>
+            <span class="davinci-badge">✦ DaVinci</span>
+          </div>
+          <div class="psec-body">
+            <!-- Mode toggle: Shadows/Midtones/Highlights ↔ Lift/Gamma/Gain -->
+            <div class="cg-mode-toggle">
+              <span class="cg-mode-lbl">Mode</span>
+              <button class="cg-mode-btn active" onclick="setCgMode(this,'smh')">S / M / H</button>
+              <button class="cg-mode-btn" onclick="setCgMode(this,'lgg')">L / G / G</button>
+            </div>
+            <div class="cg-wheels">
+              <!-- Shadows / Lift -->
+              <div class="cg-wheel">
+                <div class="cg-wheel-name" id="cgw-name-1">Shadows</div>
+                <div class="wheel" onmousedown="startWheelDrag(this,event)">
+                  <div class="wheel-cursor" style="top:60%;left:45%"></div>
+                </div>
+                <div class="cg-readout">
+                  <div class="cg-read-field"><span class="cg-read-lbl">R</span><span class="cg-read-val" id="cg-1-r">0</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">G</span><span class="cg-read-val" id="cg-1-g">0</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">B</span><span class="cg-read-val" id="cg-1-b">0</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">L</span><span class="cg-read-val" id="cg-1-l">−5</span></div>
+                </div>
+                <div class="cg-sat-row">
+                  <span class="cg-sat-lbl">SAT</span>
+                  <input type="range" class="sl" min="0" max="200" value="100" style="flex:1" oninput="uv(this,'cg-1-sat',v=>v)">
+                </div>
+                <span class="cg-wheel-reset" onclick="resetWheel(1)">↺</span>
+              </div>
+              <!-- Midtones / Gamma -->
+              <div class="cg-wheel">
+                <div class="cg-wheel-name" id="cgw-name-2">Midtones</div>
+                <div class="wheel" onmousedown="startWheelDrag(this,event)">
+                  <div class="wheel-cursor" style="top:50%;left:52%"></div>
+                </div>
+                <div class="cg-readout">
+                  <div class="cg-read-field"><span class="cg-read-lbl">R</span><span class="cg-read-val" id="cg-2-r">+3</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">G</span><span class="cg-read-val" id="cg-2-g">+1</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">B</span><span class="cg-read-val" id="cg-2-b">0</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">L</span><span class="cg-read-val" id="cg-2-l">+5</span></div>
+                </div>
+                <div class="cg-sat-row">
+                  <span class="cg-sat-lbl">SAT</span>
+                  <input type="range" class="sl" min="0" max="200" value="110" style="flex:1" oninput="uv(this,'cg-2-sat',v=>v)">
+                </div>
+                <span class="cg-wheel-reset" onclick="resetWheel(2)">↺</span>
+              </div>
+              <!-- Highlights / Gain -->
+              <div class="cg-wheel">
+                <div class="cg-wheel-name" id="cgw-name-3">Highlights</div>
+                <div class="wheel" onmousedown="startWheelDrag(this,event)">
+                  <div class="wheel-cursor" style="top:40%;left:55%"></div>
+                </div>
+                <div class="cg-readout">
+                  <div class="cg-read-field"><span class="cg-read-lbl">R</span><span class="cg-read-val" id="cg-3-r">+5</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">G</span><span class="cg-read-val" id="cg-3-g">+2</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">B</span><span class="cg-read-val" id="cg-3-b">−3</span></div>
+                  <div class="cg-read-field"><span class="cg-read-lbl">L</span><span class="cg-read-val" id="cg-3-l">+8</span></div>
+                </div>
+                <div class="cg-sat-row">
+                  <span class="cg-sat-lbl">SAT</span>
+                  <input type="range" class="sl" min="0" max="200" value="105" style="flex:1" oninput="uv(this,'cg-3-sat',v=>v)">
+                </div>
+                <span class="cg-wheel-reset" onclick="resetWheel(3)">↺</span>
+              </div>
+            </div>
+            <div class="slrow"><span class="sl-lbl">Blending</span><input type="range" class="sl" min="0" max="100" value="50" oninput="uv(this,'cg-blend',v=>v)"><span class="sl-val" id="cg-blend">50</span><span class="sl-reset" onclick="rv(this,50,'cg-blend',v=>v)">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Balance</span><input type="range" class="sl" min="-100" max="100" value="0" oninput="uv(this,'cg-bal',v=>(v>0?'+':'')+v)"><span class="sl-val" id="cg-bal">0</span><span class="sl-reset" onclick="rv(this,0,'cg-bal',v=>'0')">↺</span></div>
+          </div>
+        </div>
+
+        <!-- DETAIL -->
+        <div class="psec" id="sec-detail">
+          <div class="psec-hd" onclick="toggleSec('sec-detail')"><span class="psec-tri">▼</span><span class="psec-name">Detail</span></div>
+          <div class="psec-body">
+            <div class="detail-sub">Sharpening</div>
+            <div class="slrow"><span class="sl-lbl">Amount</span><input type="range" class="sl" min="0" max="150" value="60" oninput="uv(this,'d-amt',v=>v)"><span class="sl-val" id="d-amt">60</span><span class="sl-reset" onclick="rv(this,60,'d-amt',v=>v)">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Radius</span><input type="range" class="sl" min="5" max="30" step="0.1" value="10" oninput="uv(this,'d-rad',v=>parseFloat(v).toFixed(1))"><span class="sl-val" id="d-rad">1.0</span><span class="sl-reset" onclick="rv(this,10,'d-rad',v=>'1.0')">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Detail</span><input type="range" class="sl" min="0" max="100" value="25" oninput="uv(this,'d-det',v=>v)"><span class="sl-val" id="d-det">25</span><span class="sl-reset" onclick="rv(this,25,'d-det',v=>v)">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Masking</span><input type="range" class="sl" min="0" max="100" value="0" oninput="uv(this,'d-msk',v=>v)"><span class="sl-val" id="d-msk">0</span><span class="sl-reset" onclick="rv(this,0,'d-msk',v=>v)">↺</span></div>
+            <div class="detail-sub" style="margin-top:12px">Noise Reduction</div>
+            <div class="slrow"><span class="sl-lbl">Luminance</span><input type="range" class="sl" min="0" max="100" value="30" oninput="uv(this,'n-lum',v=>v)"><span class="sl-val" id="n-lum">30</span><span class="sl-reset" onclick="rv(this,30,'n-lum',v=>v)">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Color</span><input type="range" class="sl" min="0" max="100" value="25" oninput="uv(this,'n-col',v=>v)"><span class="sl-val" id="n-col">25</span><span class="sl-reset" onclick="rv(this,25,'n-col',v=>v)">↺</span></div>
+            <div class="slrow"><span class="sl-lbl">Detail</span><input type="range" class="sl" min="0" max="100" value="50" oninput="uv(this,'n-det',v=>v)"><span class="sl-val" id="n-det">50</span><span class="sl-reset" onclick="rv(this,50,'n-det',v=>v)">↺</span></div>
+          </div>
+        </div>
+
+        <!-- LUT -->
+        <div class="psec closed" id="sec-lut">
+          <div class="psec-hd" onclick="toggleSec('sec-lut')"><span class="psec-tri">▼</span><span class="psec-name">LUT / Film</span></div>
+          <div class="psec-body">
+            <div class="lut-list">
+              <div class="li on"><div class="li-sw" style="background:linear-gradient(90deg,#C5902A,#E8B86D)"></div><div class="li-name">Velvia 100</div><div class="li-tag">Fuji</div></div>
+              <div class="li"><div class="li-sw" style="background:linear-gradient(90deg,#8898B8,#C0CCDE)"></div><div class="li-name">Provia 100F</div><div class="li-tag">Fuji</div></div>
+              <div class="li"><div class="li-sw" style="background:linear-gradient(90deg,#446644,#88AA88)"></div><div class="li-name">Acros Green</div><div class="li-tag">B&W</div></div>
+              <div class="li"><div class="li-sw" style="background:linear-gradient(90deg,#6B3A1A,#B87040)"></div><div class="li-name">Eterna Cinema</div><div class="li-tag">Fuji</div></div>
+              <div class="li"><div class="li-sw" style="background:linear-gradient(90deg,#5C4A8A,#A090CC)"></div><div class="li-name">Classic Chrome</div><div class="li-tag">Fuji</div></div>
+            </div>
+            <div style="height:8px"></div>
+            <div class="slrow"><span class="sl-lbl">Opacity</span><input type="range" class="sl" min="0" max="100" value="80" oninput="uv(this,'v-lop',v=>v+'%')"><span class="sl-val" id="v-lop">80%</span><span class="sl-reset" onclick="rv(this,80,'v-lop',v=>v+'%')">↺</span></div>
+            <div style="height:6px"></div>
+            <button class="ghost-btn">+ 載入 .cube LUT</button>
+          </div>
+        </div>
+
+        <div style="height:16px"></div>
+      </div><!-- /psections -->
+    </div>
+  </div>
+
+  <div class="sbar2">
+    <div class="si"><div class="sdot"></div>Develop</div>
+    <div class="ssep"></div><div class="si">Velvia 100 已套用</div>
+    <div class="ssep"></div><div class="si">Sony A7R V · 35mm f/1.4</div>
+    <div style="margin-left:auto" class="si">4032×3024 · RAW</div>
+  </div>
+</div></div><!-- /grade page -->
+
+
+<!-- Batch modal -->
+<div class="overlay" id="modal-batch" onclick="if(event.target===this)closeModal('batch')">
+  <div class="modal">
+    <div class="modal-hd"><span class="modal-title">批次匯出 (6 張)</span><button class="modal-x" onclick="closeModal('batch')">×</button></div>
+    <div class="modal-body">
+      <div><div style="display:flex;justify-content:space-between;margin-bottom:5px"><span style="font-size:11px;color:var(--text2)">進度 2 / 6</span><span style="font-size:11px;color:var(--gold)">33%</span></div><div class="prog-track"><div class="prog-fill" style="width:33%"></div></div></div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="bi"><div class="bi-thumb"><div class="bi-bg" style="background:linear-gradient(135deg,#2C241A,#0F0D08)"></div></div><div class="bi-info"><div class="bi-name">DSC_0001.ARW</div><div class="bi-meta">Classic · Velvia 100</div></div><div class="badge bd">完成</div></div>
+        <div class="bi"><div class="bi-thumb"><div class="bi-bg" style="background:linear-gradient(135deg,#1A2C1A,#0F1A0F)"></div></div><div class="bi-info"><div class="bi-name">DSC_0002.ARW</div><div class="bi-meta">Classic · Provia 100F</div></div><div class="badge bd">完成</div></div>
+        <div class="bi proc"><div class="bi-thumb"><div class="bi-bg" style="background:linear-gradient(135deg,#2A1E12,#1A1208)"></div></div><div class="bi-info"><div class="bi-name">DSC_0003.ARW</div><div class="bi-meta">Rounded · 晨光暖調</div></div><div class="badge ba2">處理中</div></div>
+        <div class="bi" style="opacity:.45"><div class="bi-thumb"><div class="bi-bg" style="background:linear-gradient(135deg,#12182A,#0A1018)"></div></div><div class="bi-info"><div class="bi-name">DSC_0004.ARW</div><div class="bi-meta">Split · Eterna Cinema</div></div><div class="badge bw">等待</div></div>
+        <div class="bi" style="opacity:.45"><div class="bi-thumb"><div class="bi-bg" style="background:linear-gradient(135deg,#2A1220,#1A0810)"></div></div><div class="bi-info"><div class="bi-name">DSC_0005.ARW</div><div class="bi-meta">Classic · 夕陽橘紅</div></div><div class="badge bw">等待</div></div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="exp-btn" style="flex:1" onclick="closeModal('batch')">開始匯出</button>
+      <button class="ghost-btn" style="width:70px" onclick="closeModal('batch')">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="note">調色頁面對標 Lightroom Classic + DaVinci Resolve · Scopes: HIST / WAVE / PARADE / VECT · 色輪 S/M/H ↔ L/G/G 模式 · Before/After 對比切換</div>
+
+<script>
+// Page switching
+function showPage(n) {
+  document.querySelectorAll('.app').forEach((a,i)=>{
+    const pages=['main','grade','preset'];
+    a.querySelector('.page').classList.toggle('on', pages[i]===n);
+  });
+  document.querySelectorAll('.p-tab').forEach((t,i)=>{
+    const names=['main','grade','preset','batch'];
+    t.classList.toggle('on',names[i]===n);
+  });
+}
+
+// Modal
+function showModal(n){document.getElementById('modal-'+n).classList.add('on')}
+function closeModal(n){document.getElementById('modal-'+n).classList.remove('on')}
+
+// Template switching
+function setTpl(btn,t,pg) {
+  const suffix = pg==='main'?'main':'grade';
+  btn.closest('.tpl-sw').querySelectorAll('.tpl-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const ids = pg==='main'?{c:'mc-c',r:'mc-r',s:'mc-s'}:{c:'gc-c',r:'gc-r',s:'gc-s'};
+  Object.values(ids).forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none'});
+  const el=document.getElementById(ids[t]);
+  if(el) el.style.display=t==='s'?'flex':'flex';
+  if(el&&t==='c') el.style.flexDirection='column';
+}
+
+// Panel tabs (main)
+function setRpTab(btn,id){
+  btn.closest('.rpanel').querySelectorAll('.rp-tab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  btn.closest('.rpanel').querySelectorAll('.rp-scroll').forEach(s=>s.style.display='none');
+  document.getElementById(id).style.display='flex';
+}
+
+// Collapsible sections
+function toggleSec(id){
+  const sec=document.getElementById(id);
+  sec.classList.toggle('closed');
+}
+
+// Sliders
+function uv(inp,id,fmt){
+  const el=document.getElementById(id);
+  if(el) el.textContent=fmt(inp.value);
+  const pct=((inp.value-inp.min)/(inp.max-inp.min)*100).toFixed(1);
+  inp.style.background=`linear-gradient(to right,var(--gold) ${pct}%,var(--ink5) ${pct}%)`;
+}
+function rv(btn,def,id,fmt){
+  const row=btn.closest('.slrow');
+  const inp=row.querySelector('input');
+  if(inp){inp.value=def;uv(inp,id,fmt);}
+}
+
+// Init sliders
+document.querySelectorAll('input.sl').forEach(inp=>{
+  const pct=((inp.value-inp.min)/(inp.max-inp.min)*100).toFixed(1);
+  inp.style.background=`linear-gradient(to right,var(--gold) ${pct}%,var(--ink5) ${pct}%)`;
+});
+
+// HSL tabs
+function setHslTab(btn,showId){
+  btn.closest('.hsl-tabs').querySelectorAll('.hsl-tab').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  ['hsl-h','hsl-s','hsl-l'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=id===showId?'block':'none'});
+}
+function setHslDot(d){d.closest('.hsl-color-row').querySelectorAll('.hsl-dot').forEach(x=>x.classList.remove('on'));d.classList.add('on')}
+
+// Curve tabs
+function setCtab(btn){btn.closest('.curve-tabs').querySelectorAll('.ctab').forEach(b=>b.classList.remove('on'));btn.classList.add('on')}
+
+// WB opts
+function setWb(btn){btn.closest('.wb-row').querySelectorAll('.wb-opt').forEach(b=>b.classList.remove('on'));btn.classList.add('on')}
+
+// Misc
+function setRc(c){c.closest('.ratio-grid').querySelectorAll('.rc').forEach(x=>x.classList.remove('on'));c.classList.add('on')}
+function setSw(s){s.closest('.swatches').querySelectorAll('.sw').forEach(x=>x.classList.remove('on'));s.classList.add('on')}
+function setBc(b){b.closest('.bgrid').querySelectorAll('.bc').forEach(x=>x.classList.remove('on'));b.classList.add('on')}
+function setSg(b){b.closest('.seg').querySelectorAll('.sg').forEach(x=>x.classList.remove('on'));b.classList.add('on')}
+function setPr(b){b.closest('.presets-scroll').querySelectorAll('.pr-item').forEach(x=>x.classList.remove('on'));b.classList.add('on')}
+function setNz(n){n.closest('.nav-zooms').querySelectorAll('.nz').forEach(x=>x.classList.remove('on'));n.classList.add('on')}
+
+// LUT items
+document.querySelectorAll('.li').forEach(li=>{
+  li.addEventListener('click',()=>{li.closest('.lut-list').querySelectorAll('.li').forEach(x=>x.classList.remove('on'));li.classList.add('on')});
+});
+
+// Before/After toggle
+function toggleBA(btn) {
+  btn.classList.toggle('on');
+  const line=document.getElementById('ba-line');
+  if(line) line.style.display=btn.classList.contains('on')?'flex':'none';
+}
+
+// TAT toggle
+function toggleTat(btn){btn.classList.toggle('on')}
+
+// Scope switching
+function setScope(btn, type) {
+  document.querySelectorAll('.scope-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.scope-view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('sv-'+type).classList.add('active');
+}
+
+// Color Grading mode toggle (S/M/H ↔ L/G/G)
+const cgwNameMap = {smh:['Shadows','Midtones','Highlights'], lgg:['Lift','Gamma','Gain']};
+function setCgMode(btn, mode) {
+  btn.closest('.cg-mode-toggle').querySelectorAll('.cg-mode-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const names = cgwNameMap[mode];
+  [1,2,3].forEach((i,idx)=>{
+    const el=document.getElementById('cgw-name-'+i);
+    if(el) el.textContent=names[idx];
+  });
+}
+
+// Color wheel drag with live R/G/B/L readout
+function startWheelDrag(wheel, e) {
+  e.preventDefault();
+  applyWheelDrag(wheel, e);
+  function onMove(ev){applyWheelDrag(wheel,ev);}
+  function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+function applyWheelDrag(wheel, e) {
+  const rect=wheel.getBoundingClientRect();
+  const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
+  const maxR=rect.width/2-6;
+  let dx=e.clientX-cx, dy=e.clientY-cy;
+  const dist=Math.sqrt(dx*dx+dy*dy);
+  if(dist>maxR){dx=dx/dist*maxR;dy=dy/dist*maxR;}
+  const cursor=wheel.querySelector('.wheel-cursor');
+  if(cursor){
+    cursor.style.left=((cx+dx-rect.left)/rect.width*100)+'%';
+    cursor.style.top=((cy+dy-rect.top)/rect.height*100)+'%';
+  }
+  // Update R/G/B readout
+  const cg=wheel.closest('.cg-wheel');
+  const allWheels=Array.from(document.querySelectorAll('#sec-cg .cg-wheel'));
+  const idx=allWheels.indexOf(cg)+1;
+  if(idx>0){
+    const norm=Math.min(dist,maxR)/maxR;
+    const angle=Math.atan2(dy,dx);
+    const r=Math.round(Math.cos(angle)*norm*25);
+    const g=Math.round(Math.cos(angle+2.09)*norm*22);
+    const b=Math.round(Math.cos(angle+4.19)*norm*22);
+    const fmt=v=>(v>0?'+':'')+v;
+    const rEl=document.getElementById(`cg-${idx}-r`);
+    const gEl=document.getElementById(`cg-${idx}-g`);
+    const bEl=document.getElementById(`cg-${idx}-b`);
+    if(rEl) rEl.textContent=fmt(r);
+    if(gEl) gEl.textContent=fmt(g);
+    if(bEl) bEl.textContent=fmt(b);
+  }
+}
+
+function resetWheel(idx) {
+  const allWheels=Array.from(document.querySelectorAll('#sec-cg .cg-wheel'));
+  const cg=allWheels[idx-1];
+  if(!cg) return;
+  const cursor=cg.querySelector('.wheel-cursor');
+  if(cursor){cursor.style.left='50%';cursor.style.top='50%';}
+  ['r','g','b'].forEach(c=>{
+    const el=document.getElementById(`cg-${idx}-${c}`);
+    if(el) el.textContent='0';
+  });
+}
+
+// Legacy click handler kept for compatibility
+function moveWheelCursor(wheel,e){applyWheelDrag(wheel,e);}
+
+// Film item selection
+document.querySelectorAll('.fi').forEach(fi=>{
+  fi.addEventListener('click',()=>{fi.closest('.film').querySelectorAll('.fi').forEach(f=>f.classList.remove('on'));fi.classList.add('on')});
+});
+
+showPage('main');
+</script>
+</body>
+</html>
