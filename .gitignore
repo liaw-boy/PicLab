@@ -52,3 +52,81 @@ iphone-multifunctional-camera-watermark-shortcut-2a.jpg
 img_9487-2-1.jpg
 .env
 upload-server/node_modules/
+
+# RAW originals (cameras write uppercase; both cases excluded for safety)
+*.cr2
+*.CR2
+*.cr3
+*.CR3
+*.crw
+*.CRW
+*.nef
+*.NEF
+*.nrw
+*.NRW
+*.arw
+*.ARW
+*.srf
+*.SRF
+*.sr2
+*.SR2
+*.raf
+*.RAF
+*.rw2
+*.RW2
+*.orf
+*.ORF
+*.pef
+*.PEF
+*.srw
+*.SRW
+*.x3f
+*.X3F
+*.iiq
+*.IIQ
+*.3fr
+*.3FR
+*.dng
+*.DNG
+*.heic
+*.HEIC
+*.heif
+*.HEIF
+
+# Personal test photo collections (don't ship users' photos)
+tests/JR/
+tests/20260328-*/
+tests/export/
+upload-server/uploads/
+
+# Large model weights (download separately, see docs)
+src/assets/models/*.onnx
+src/assets/models/*.onnx.data
+src/assets/models/*.pth
+src/assets/models/*.pt
+src/assets/models/*.safetensors
+
+# Local MCP / tooling configs that may carry API keys
+.mcp.json
+*.mcp.local.json
+
+# Re-include app brand assets and generated icons (override *.png/*.jpg)
+!src/assets/brands/
+!src/assets/brands/**
+!src/assets/icons/
+!src/assets/icons/**
+!src/assets/luts/
+!src/assets/luts/**
+!src/gui/web/fonts/
+!src/gui/web/fonts/**
+
+# Re-include README screenshots if any
+!docs/img/
+!docs/img/**
+
+# Tailwind generated artifacts that should ship
+!src/gui/web/tailwind.css
+
+# PicLab Atelier launcher script outputs
+.write_test
+piclab_preview.html

@@ -14,10 +14,16 @@ from typing import Optional
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
-    QFileDialog, QMessageBox, QProgressBar, QLabel,
+    QFileDialog, QMessageBox, QProgressBar, QLabel, QSizeGrip,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QCoreApplication, QTimer
-from PyQt6.QtGui import QAction, QDragEnterEvent, QDropEvent
+from PyQt6.QtCore import (
+    Qt, QThread, pyqtSignal, QCoreApplication, QTimer, QPoint, QRect, QRectF,
+    QPropertyAnimation, QEasingCurve,
+)
+from PyQt6.QtGui import (
+    QAction, QDragEnterEvent, QDropEvent,
+    QPainter, QColor, QPainterPath, QPen, QBrush,
+)
 
 from PIL import Image, ImageOps
 
@@ -28,6 +34,7 @@ from src.gui.left_nav import LeftNavBar
 from src.gui.preview_panel import PreviewPanel
 from src.gui.settings_panel import SettingsPanel
 from src.gui.export_dialog import ExportDialog
+from src.gui.floating_widgets import DrawerToggle, FloatingDock, FloatingHistogram
 import dataclasses
 
 from src.models.photo import Photo
@@ -212,14 +219,74 @@ class SlidingBody(QWidget):
         self._anim_group.start()
 
 
+# ── 圓角背景容器 ─────────────────────────────────────────────────────────────
+
+class _RoundedFrame(QWidget):
+    """以 QPainter 繪製圓角背景 + 1px 金色描邊的容器 widget。
+    子 widget 正常放置其中，視覺上形成圓角邊框。
+    """
+
+    def __init__(self, radius: int = 14, parent=None):
+        super().__init__(parent)
+        self._r = radius
+        import src.gui.theme as _T
+        from src.gui.theme_manager import ThemeManager
+        ThemeManager.instance().theme_changed.connect(lambda _: self.update())
+
+    def paintEvent(self, _) -> None:
+        import src.gui.theme as _T
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H, R = self.width(), self.height(), self._r
+
+        # ── 陰影（多層半透明圓角）─────────────────────────────────────────────
+        for i in range(6, 0, -1):
+            shadow_col = QColor(0, 0, 0, 18 * i)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(shadow_col))
+            m = 6 - i
+            p.drawRoundedRect(m, m + 2, W - m * 2, H - m * 2, R + 1, R + 1)
+
+        # ── 實體背景 ──────────────────────────────────────────────────────────
+        path = QPainterPath()
+        path.addRoundedRect(0, 0, W, H, R, R)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(_T.BG)))
+        p.fillPath(path, QBrush(QColor(_T.BG)))
+
+        # ── 金色描邊（1px）────────────────────────────────────────────────────
+        pen = QPen(QColor(_T.GOLD), 1.2)
+        pen.setCosmetic(True)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(0.6, 0.6, W - 1.2, H - 1.2), R, R)
+
+        p.end()
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class MainWindow(QMainWindow):
+    # ── 無框圓角視窗支援 ──────────────────────────────────────────────────────
+    _CORNER_R   = 14   # px — 視窗圓角半徑
+    _DRAG_AREA  = 42   # px — TopBar 高度，拖曳移動感應區
+    _RESIZE_HIT = 6    # px — 邊緣拖曳調整大小感應寬度
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("PicLab")
         self.setMinimumSize(1100, 700)
         self.resize(1440, 860)
+
+        # ── 無框 + 透明背景 ───────────────────────────────────────────────────
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.Window
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._drag_pos: QPoint | None = None
+        self._resize_edge: str | None = None   # 'right'|'bottom'|'corner'
+        self._resize_start_geom = self.geometry()
 
         self._tm      = ThemeManager.instance()
         self._photos: list[Photo]                       = []
@@ -252,19 +319,92 @@ class MainWindow(QMainWindow):
     # ── Style ─────────────────────────────────────────────────────────────────
 
     def _apply_window_style(self) -> None:
-        self.setStyleSheet(T.app_qss())
+        self.setStyleSheet(T.app_qss() + f"""
+            QWidget#OuterShell {{ background: transparent; border: none; }}
+            QWidget#AppFrame   {{ background: transparent; border: none; }}
+        """)
 
     def _on_theme_change(self, dark: bool) -> None:
         self._apply_window_style()
         self._apply_menubar_style()
         self._apply_status_style()
 
+    # ── 無框視窗拖曳移動 + 邊緣縮放 ──────────────────────────────────────────
+
+    def _edge_hit(self, pos: QPoint) -> str | None:
+        """判斷滑鼠是否在可縮放邊緣，回傳方向或 None。"""
+        HIT = self._RESIZE_HIT
+        W, H = self.width(), self.height()
+        x, y = pos.x(), pos.y()
+        on_r = x >= W - HIT
+        on_b = y >= H - HIT
+        if on_r and on_b: return "corner"
+        if on_r: return "right"
+        if on_b: return "bottom"
+        return None
+
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton:
+            edge = self._edge_hit(e.position().toPoint())
+            if edge:
+                self._resize_edge = edge
+                self._drag_pos = e.globalPosition().toPoint()
+                self._resize_start_geom = self.geometry()
+            elif e.position().y() <= self._DRAG_AREA:
+                self._drag_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                self._resize_edge = None
+        super().mousePressEvent(e)
+
+    def mouseMoveEvent(self, e) -> None:
+        gpos = e.globalPosition().toPoint()
+        if self._drag_pos is not None and self._resize_edge:
+            dx = gpos.x() - self._drag_pos.x()
+            dy = gpos.y() - self._drag_pos.y()
+            g  = self._resize_start_geom
+            if self._resize_edge in ("right", "corner"):
+                self.resize(max(1100, g.width() + dx), self.height())
+            if self._resize_edge in ("bottom", "corner"):
+                self.resize(self.width(), max(700, g.height() + dy))
+        elif (self._drag_pos is not None and not self._resize_edge
+              and e.buttons() & Qt.MouseButton.LeftButton):
+            self.move(gpos - self._drag_pos)
+        else:
+            # 更新游標形狀
+            edge = self._edge_hit(e.position().toPoint())
+            if edge == "corner":
+                self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+            elif edge == "right":
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+            elif edge == "bottom":
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().mouseMoveEvent(e)
+
+    def mouseReleaseEvent(self, e) -> None:
+        self._drag_pos = None
+        self._resize_edge = None
+        super().mouseReleaseEvent(e)
+
     # ── UI construction ───────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        central = QWidget()
-        self.setCentralWidget(central)
+        # ── 透明容器：負責給圓角框留出陰影 margin ─────────────────────────────
+        outer = QWidget()
+        outer.setObjectName("OuterShell")
+        outer.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setCentralWidget(outer)
 
+        outer_lay = QVBoxLayout(outer)
+        outer_lay.setContentsMargins(8, 8, 8, 8)   # shadow margin
+        outer_lay.setSpacing(0)
+
+        # ── 圓角實體容器 ──────────────────────────────────────────────────────
+        self._frame = _RoundedFrame(radius=self._CORNER_R)
+        self._frame.setObjectName("AppFrame")
+        outer_lay.addWidget(self._frame)
+
+        central = self._frame
         root = QVBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -278,15 +418,11 @@ class MainWindow(QMainWindow):
         self._top_bar.step_changed.connect(self._on_step_changed)
         root.addWidget(self._top_bar)
 
-        # ── 畫面 1：調色（左導覽 + 預覽 + 調色面板）──
+        # ── 畫面 1：調色（沉浸式：預覽全寬 + 浮動調色 drawer）──
         screen1 = QWidget()
         s1_lay = QHBoxLayout(screen1)
         s1_lay.setContentsMargins(0, 0, 0, 0)
         s1_lay.setSpacing(0)
-
-        left_nav1 = LeftNavBar(mode="develop")
-        left_nav1.section_requested.connect(self._on_develop_nav_section)
-        s1_lay.addWidget(left_nav1)
 
         self._preview = PreviewPanel()
         self._preview.open_file_requested.connect(self._open_file)
@@ -302,17 +438,15 @@ class MainWindow(QMainWindow):
         self._grade_panel = ColorGradePanel()
         self._grade_panel.grade_changed.connect(self._on_grade_changed)
         self._grade_panel.go_next.connect(lambda: self._on_step_changed(2))
+        self._grade_panel.undo_requested.connect(self._undo_grade)
+        self._grade_panel.reset_requested.connect(self._on_grade_reset)
         s1_lay.addWidget(self._grade_panel)
 
-        # ── 畫面 2：加框（左導覽 + 預覽（共用） + 設定面板）──
+        # ── 畫面 2：加框（沉浸式：預覽全寬 + 浮動設定 drawer）──
         screen2 = QWidget()
         s2_lay = QHBoxLayout(screen2)
         s2_lay.setContentsMargins(0, 0, 0, 0)
         s2_lay.setSpacing(0)
-
-        left_nav2 = LeftNavBar()
-        left_nav2.section_requested.connect(self._on_nav_section)
-        s2_lay.addWidget(left_nav2)
 
         self._preview2 = PreviewPanel()
         self._preview2.open_file_requested.connect(self._open_file)
@@ -330,6 +464,54 @@ class MainWindow(QMainWindow):
 
         # ── 加入「返回調色」按鈕到加框面板 ──
         self._settings.add_back_button(lambda: self._on_step_changed(1))
+
+        # ── 沉浸式浮動 UI 元件 ────────────────────────────────────────────────
+        # 1. Drawer 折疊動畫 — 必須先清掉 setFixedWidth 鎖死
+        from PyQt6.QtWidgets import QSizePolicy
+        for panel, default_w in ((self._grade_panel, 320), (self._settings, 360)):
+            panel.setMinimumWidth(0)
+            panel.setMaximumWidth(default_w)
+            sp = panel.sizePolicy()
+            sp.setHorizontalPolicy(QSizePolicy.Policy.Maximum)
+            panel.setSizePolicy(sp)
+
+        self._grade_drawer_anim = QPropertyAnimation(self._grade_panel, b"maximumWidth")
+        self._grade_drawer_anim.setDuration(280)
+        self._grade_drawer_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._grade_panel_expanded = True
+        self._grade_panel_full_w = 320
+
+        self._settings_drawer_anim = QPropertyAnimation(self._settings, b"maximumWidth")
+        self._settings_drawer_anim.setDuration(280)
+        self._settings_drawer_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._settings_panel_expanded = True
+        self._settings_panel_full_w = 360
+
+        # 2. Drawer toggle — 浮動金色圓形按鈕，貼在 preview 右上
+        self._toggle1 = DrawerToggle(self._preview)
+        self._toggle1.clicked.connect(lambda: self._toggle_drawer(1))
+        self._toggle1.move(self._preview.width() - 56, 16)
+        self._toggle1.raise_()
+
+        self._toggle2 = DrawerToggle(self._preview2)
+        self._toggle2.clicked.connect(lambda: self._toggle_drawer(2))
+        self._toggle2.move(self._preview2.width() - 56, 16)
+        self._toggle2.raise_()
+
+        # 3. 浮動 histogram glass card — 右上角
+        self._float_hist = FloatingHistogram(self._preview)
+        self._float_hist.move(self._preview.width() - 240, 60)
+        self._float_hist.raise_()
+
+        # 4. 浮動工具 dock — 底部置中（pill shape, 漂浮）
+        self._float_dock = FloatingDock(self._preview)
+        self._float_dock.tool_clicked.connect(self._on_dock_tool)
+        self._float_dock.raise_()
+
+        # 重新定位 floating 元件（resizeEvent 時觸發）
+        self._preview.installEventFilter(self)
+        self._preview2.installEventFilter(self)
+        self._reposition_floats()
 
         # ── SlidingBody ──
         self._slider = SlidingBody(screen1, screen2)
@@ -436,6 +618,67 @@ class MainWindow(QMainWindow):
             self._sb.showMessage("步驟 1：調色 — 完成後按「下一步：加框」")
         else:
             self._sb.showMessage("步驟 2：加框 — 設定完成後按「匯出照片」")
+
+    # ── Floating overlay helpers ──────────────────────────────────────────────
+
+    def _reposition_floats(self) -> None:
+        """Position floating overlay widgets relative to current preview sizes."""
+        for prev, toggle, hist_dock in (
+            (self._preview, self._toggle1, True),
+            (self._preview2, self._toggle2, False),
+        ):
+            pw = prev.width()
+            ph = prev.height()
+            # Toggle: top-right of preview, slight inset
+            toggle.move(max(16, pw - 52), 16)
+
+            if hist_dock:
+                # Histogram top-right (below toggle)
+                self._float_hist.move(max(16, pw - 240), 64)
+                # Dock: bottom-center of preview
+                dx = (pw - self._float_dock.width()) // 2
+                dy = ph - self._float_dock.height() - 22
+                self._float_dock.move(max(16, dx), max(16, dy))
+
+    def _toggle_drawer(self, screen: int) -> None:
+        """Animate the right drawer panel collapse/expand."""
+        if screen == 1:
+            expanded = self._grade_panel_expanded
+            anim = self._grade_drawer_anim
+            tgt = 0 if expanded else self._grade_panel_full_w
+            anim.stop()
+            anim.setStartValue(self._grade_panel.maximumWidth())
+            anim.setEndValue(tgt)
+            anim.start()
+            self._grade_panel_expanded = not expanded
+            self._toggle1.set_expanded(self._grade_panel_expanded)
+        else:
+            expanded = self._settings_panel_expanded
+            anim = self._settings_drawer_anim
+            tgt = 0 if expanded else self._settings_panel_full_w
+            anim.stop()
+            anim.setStartValue(self._settings.maximumWidth())
+            anim.setEndValue(tgt)
+            anim.start()
+            self._settings_panel_expanded = not expanded
+            self._toggle2.set_expanded(self._settings_panel_expanded)
+
+    def _on_dock_tool(self, tool_id: str) -> None:
+        """Floating bottom dock — jump to corresponding grade section."""
+        # Make sure the drawer is open so user sees the panel scroll
+        if not self._grade_panel_expanded:
+            self._toggle_drawer(1)
+        try:
+            self._grade_panel.scroll_to_section(tool_id)
+        except Exception:
+            pass
+        self._float_dock.set_active(tool_id)
+
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        if event.type() == QEvent.Type.Resize and obj in (self._preview, self._preview2):
+            self._reposition_floats()
+        return super().eventFilter(obj, event)
 
     # ── Navigation ────────────────────────────────────────────────────────────
 
@@ -717,6 +960,7 @@ class MainWindow(QMainWindow):
         self._grade_settings[idx] = grade
         self._graded_cache.pop(idx, None)
         self._processed_cache.pop(idx, None)
+        self._sync_undo_btn()
         # 用 debounce 延遲觸發，拖動時不會每幀都重算
         self._grade_debounce.start()
 
@@ -911,6 +1155,20 @@ class MainWindow(QMainWindow):
     def grade_changed_from_undo(self, grade: GradeSettings) -> None:
         """Undo/Redo 後觸發重新渲染（不再推入歷史）。"""
         self._grade_debounce.start()
+        self._sync_undo_btn()
+
+    def _sync_undo_btn(self) -> None:
+        """同步「復原」按鈕的啟用狀態。"""
+        can = bool(self._grade_history.get(self._cur_idx))
+        self._grade_panel.set_can_undo(can)
+
+    def _on_grade_reset(self) -> None:
+        """重設按鈕：清空當前照片的 undo history。"""
+        if self._cur_idx < 0:
+            return
+        self._grade_history.pop(self._cur_idx, None)
+        self._grade_future.pop(self._cur_idx, None)
+        self._sync_undo_btn()
 
     # ── Keyboard shortcuts ────────────────────────────────────────────────────
 

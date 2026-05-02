@@ -33,36 +33,33 @@ _DARK = dict(
     GOLD_DIM        = "rgba(197,164,106,0.15)",
     GOLD_GLOW       = "rgba(197,164,106,0.07)",
 
-    # Backgrounds — ink scale (darkest → lightest)
-    BG              = "#0B0B0E",   # ink  — app root
-    SURFACE         = "#111116",   # ink2 — panels
-    SURFACE_2       = "#18181F",   # ink3 — cards / dialogs
-    SURFACE_3       = "#21212A",   # ink4 — elevated surfaces
-    SURFACE_4       = "#2C2C38",   # ink5 — hover / selected bg
+    # Backgrounds — Stitch Aurelian Dark，面板色差明顯可區分
+    BG              = "#1A1A1A",   # 視窗根背景（最深）
+    SURFACE         = "#222222",   # TopBar、側欄
+    SURFACE_2       = "#2C2C2C",   # 右側面板主體
+    SURFACE_3       = "#363636",   # 輸入框、卡片
+    SURFACE_4       = "#444444",   # hover / 選取
 
-    # Named surface aliases used by layout widgets
-    MENUBAR         = "#111116",   # title bar / menu bar
-    SIDEBAR         = "#0B0B0E",   # icon sidebar
-    IMG_LIST_BG     = "#0B0B0E",   # thumbnail strip
+    MENUBAR         = "#222222",
+    SIDEBAR         = "#1A1A1A",
+    IMG_LIST_BG     = "#1A1A1A",
 
-    # Glass overlays
-    GLASS_1         = "rgba(255,255,255,0.04)",
-    GLASS_2         = "rgba(255,255,255,0.07)",
+    GLASS_1         = "rgba(255,255,255,0.06)",
+    GLASS_2         = "rgba(255,255,255,0.11)",
 
-    # Borders
-    BORDER          = "rgba(255,255,255,0.05)",
-    BORDER_LIGHT    = "rgba(255,255,255,0.04)",
+    # Borders — 實色 + 足夠對比，確保面板分隔線可見
+    BORDER          = "#3E3E3E",
+    BORDER_LIGHT    = "#303030",
     BORDER_FOCUS    = "#C5A46A",
 
-    # Text
-    TEXT_PRIMARY    = "#EAE8E0",
-    TEXT_SECONDARY  = "#9896A0",
-    TEXT_MUTED      = "#5C5A66",
-    TEXT_DISABLED   = "#3A3840",
-    TEXT_ON_PRIMARY = "#0B0B0E",   # dark text on gold button
+    # Text — 白底文字，明確對比
+    TEXT_PRIMARY    = "#F2F0EA",   # 主要文字（暖白）
+    TEXT_SECONDARY  = "#BBBAC4",   # 次要文字（淡灰）
+    TEXT_MUTED      = "#7A7888",   # 提示文字
+    TEXT_DISABLED   = "#484858",
+    TEXT_ON_PRIMARY = "#1A1A1A",   # 金色按鈕上的深色文字
 
-    # Preview canvas
-    PREVIEW_BG      = "#0B0B0E",
+    PREVIEW_BG      = "#1A1A1A",
 
     # Semantic colours
     DANGER          = "#F87171",

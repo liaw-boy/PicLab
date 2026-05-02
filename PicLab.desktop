@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=PicLab
+Name[zh_TW]=PicLab Atelier
+GenericName=Photo Editor
+Comment=PyQt6 + WebView photo editor with SCUNet AI denoise
+Comment[zh_TW]=底片色彩、降噪、IG 邊框一站式
+Exec=/home/lbw/project/project_PicLab/run.sh
+Icon=/home/lbw/project/project_PicLab/src/assets/icons/piclab_256.png
+Terminal=false
+Categories=Graphics;Photography;RasterGraphics;
+StartupNotify=true
+StartupWMClass=PicLab
+Keywords=photo;editor;raw;ig;instagram;denoise;scunet;

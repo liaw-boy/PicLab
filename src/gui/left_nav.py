@@ -316,8 +316,8 @@ class _NavBtn(QWidget):
         else:
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(Qt.PenStyle.NoPen)
-            icon_col = QColor(T.TEXT_MUTED)
-            text_col = QColor(T.TEXT_MUTED)
+            icon_col = QColor(T.TEXT_SECONDARY)
+            text_col = QColor(T.TEXT_SECONDARY)
 
         # ── 圖示區（上 3/4）──────────────────────────────────────────────────
         cx = W // 2
@@ -405,7 +405,7 @@ class _OpenBtn(QWidget):
         p.drawRoundedRect(M, M, W-M*2, H-M*2, T.R_CHIP, T.R_CHIP)
 
         # 圖示
-        col = QColor(T.GOLD if self._hovered else T.TEXT_MUTED)
+        col = QColor(T.GOLD if self._hovered else T.TEXT_SECONDARY)
         _draw_open(p, W//2, H//2 - 6, col)
 
         # 標籤

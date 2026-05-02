@@ -237,7 +237,6 @@ class SegmentedControl(QWidget):
         self.value_changed.emit(b.property("v"))
 
     def _refresh(self) -> None:
-        # Dark luxury: subtle glass container, gold active state
         self.setStyleSheet(f"""
             QWidget {{
                 background: {T.SURFACE_3};
@@ -249,12 +248,12 @@ class SegmentedControl(QWidget):
             if i == self._sel:
                 b.setStyleSheet(f"""
                     QPushButton {{
-                        background: {T.GOLD_DIM};
-                        color: {T.GOLD};
+                        background: {T.GOLD};
+                        color: {T.TEXT_ON_PRIMARY};
                         border: none;
                         border-radius: {T.R_BUTTON}px;
                         font-size: {T.FONT_SM}px;
-                        font-weight: 600;
+                        font-weight: 700;
                         padding: 2px 8px;
                     }}
                 """)

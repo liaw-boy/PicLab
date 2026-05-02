@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy this file to .mcp.json (which is git-ignored) and fill in your own API keys.",
+  "mcpServers": {
+    "stitch": {
+      "command": "npx",
+      "args": ["-y", "@_davideast/stitch-mcp", "proxy"],
+      "env": {
+        "STITCH_API_KEY": "REPLACE_WITH_YOUR_OWN_KEY"
+      }
+    }
+  }
+}

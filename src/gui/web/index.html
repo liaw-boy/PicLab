@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PicLab — Atelier</title>
+<link href="tailwind.css" rel="stylesheet"/>
+<link href="fonts.css" rel="stylesheet"/>
+<style>
+  body { font-family: 'Inter', sans-serif; color: #1F1A14; background: #F4EFE6; overflow: hidden; }
+  .tnum { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+  /* LR-style hairline slider */
+  .pen-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; background: transparent; cursor: pointer; }
+  .pen-slider::-webkit-slider-runnable-track { height: 1px; background: #B8AFA0; }
+  .pen-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #4A1F38; margin-top: -6px; border: 2px solid #FFFFFF; box-shadow: 0 0 0 1px #1F1A14; }
+  .pen-slider:hover::-webkit-slider-thumb { background: #1F1A14; }
+
+  /* Material Symbols */
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal; font-style: normal; line-height: 1;
+    text-transform: none; display: inline-block; white-space: nowrap;
+    direction: ltr; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
+  }
+
+  /* Accordion */
+  .acc { border-bottom: 1px solid #E5DCC9; }
+  .acc-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; user-select: none; }
+  .acc-head:hover { background: #F8F4ED; }
+  .acc-head .chev { transition: transform 200ms ease; color: #7A7166; }
+  .acc.is-open .acc-head .chev { transform: rotate(90deg); color: #4A1F38; }
+  .acc-body { display: none; padding: 4px 16px 16px; }
+  .acc.is-open .acc-body { display: block; }
+
+  /* Photo viewer surround — slightly darker to make image pop (LR convention) */
+  .photo-surround { background: linear-gradient(180deg, #E8E0D0 0%, #D9D0BE 100%); }
+
+  /* Custom thin scrollbar for sidebar */
+  .panel-scroll::-webkit-scrollbar { width: 8px; }
+  .panel-scroll::-webkit-scrollbar-track { background: transparent; }
+  .panel-scroll::-webkit-scrollbar-thumb { background: #D5CBB8; border-radius: 4px; }
+  .panel-scroll::-webkit-scrollbar-thumb:hover { background: #B8AFA0; }
+</style>
+</head>
+<body>
+
+<div class="w-screen h-screen grid grid-rows-[44px_1fr] overflow-hidden">
+
+  <!-- ── Top bar (44px, LR-thin) ────────────────────────────────────────────── -->
+  <header class="row-start-1 flex items-center justify-between px-5 border-b border-line bg-bg/95 backdrop-blur-sm">
+    <div class="flex items-baseline gap-3">
+      <span class="font-sans font-bold text-base tracking-tight text-ink">PicLab</span>
+      <span class="font-sans font-medium text-xs uppercase tracking-widest text-muted">Atelier</span>
+      <span class="text-[11px] tracking-widest uppercase text-muted ml-4" id="filename-display">untitled</span>
+    </div>
+    <div class="flex items-center gap-1">
+      <button id="btn-open"   class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors">
+        <span class="material-symbols-outlined text-[16px]">folder_open</span>開啟
+      </button>
+      <button id="btn-reset"  class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors">
+        <span class="material-symbols-outlined text-[16px]">restart_alt</span>重設
+      </button>
+      <span class="w-px h-5 bg-line mx-1" aria-hidden="true"></span>
+      <button id="btn-batch" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors" title="批次處理（多張）">
+        <span class="material-symbols-outlined text-[16px]">stacks</span>批次
+      </button>
+      <button id="btn-publish" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors" title="發佈至 Instagram">
+        <span class="material-symbols-outlined text-[16px]">share</span>發佈
+      </button>
+      <button id="btn-export" class="ml-1 px-4 py-1.5 text-xs flex items-center gap-1.5 rounded-md bg-accent text-bg hover:bg-ink transition-colors">
+        <span class="material-symbols-outlined text-[16px]">arrow_outward</span>輸出
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Body: photo (left, 1fr) + right rail (340px) ───────────────────────── -->
+  <div class="row-start-2 grid grid-cols-[1fr_340px] overflow-hidden">
+
+    <!-- Photo workspace -->
+    <main class="photo-surround relative flex items-center justify-center overflow-hidden p-6">
+      <!-- Photo viewport — fills main; card styling only on empty state, image rides bare on canvas -->
+      <div id="photo-viewport" class="relative w-full h-full flex items-center justify-center overflow-hidden">
+        <img id="preview-img" alt="" class="block max-w-full max-h-full object-contain hidden"/>
+
+        <!-- Crop overlay (LR-style; hidden until 進入裁切 mode) -->
+        <div id="crop-overlay" class="absolute inset-0 hidden pointer-events-none">
+          <!-- The crop box itself — uses inline left/top/width/height; box-shadow paints the outside dim -->
+          <div id="crop-box" class="absolute border border-bg pointer-events-auto"
+               style="left:10%; top:10%; width:80%; height:80%; box-shadow: 0 0 0 9999px rgba(31,26,20,0.45);">
+            <!-- Rule-of-thirds grid -->
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="absolute top-0 bottom-0 w-px bg-bg/40" style="left:33.33%"></div>
+              <div class="absolute top-0 bottom-0 w-px bg-bg/40" style="left:66.66%"></div>
+              <div class="absolute left-0 right-0 h-px bg-bg/40" style="top:33.33%"></div>
+              <div class="absolute left-0 right-0 h-px bg-bg/40" style="top:66.66%"></div>
+            </div>
+            <!-- 8 handles — corners + edges -->
+            <div class="crop-handle absolute -left-1.5 -top-1.5 w-3 h-3 bg-bg border border-ink cursor-nwse-resize" data-h="nw"></div>
+            <div class="crop-handle absolute left-1/2 -top-1.5 w-3 h-3 -translate-x-1/2 bg-bg border border-ink cursor-ns-resize" data-h="n"></div>
+            <div class="crop-handle absolute -right-1.5 -top-1.5 w-3 h-3 bg-bg border border-ink cursor-nesw-resize" data-h="ne"></div>
+            <div class="crop-handle absolute -left-1.5 top-1/2 w-3 h-3 -translate-y-1/2 bg-bg border border-ink cursor-ew-resize" data-h="w"></div>
+            <div class="crop-handle absolute -right-1.5 top-1/2 w-3 h-3 -translate-y-1/2 bg-bg border border-ink cursor-ew-resize" data-h="e"></div>
+            <div class="crop-handle absolute -left-1.5 -bottom-1.5 w-3 h-3 bg-bg border border-ink cursor-nesw-resize" data-h="sw"></div>
+            <div class="crop-handle absolute left-1/2 -bottom-1.5 w-3 h-3 -translate-x-1/2 bg-bg border border-ink cursor-ns-resize" data-h="s"></div>
+            <div class="crop-handle absolute -right-1.5 -bottom-1.5 w-3 h-3 bg-bg border border-ink cursor-nwse-resize" data-h="se"></div>
+            <!-- Drag-inside surface to reposition -->
+            <div class="crop-move absolute inset-0 cursor-move"></div>
+          </div>
+          <!-- Floating action bar -->
+          <div class="absolute top-5 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-surface/95 backdrop-blur-sm border border-line rounded-full px-1 py-1 pointer-events-auto shadow-deep">
+            <span class="px-3 text-[11px] tracking-widest text-muted">裁切模式</span>
+            <select id="crop-aspect" class="px-2 py-1 text-[11px] rounded border border-line bg-surface text-ink">
+              <option value="free">自由</option>
+              <option value="orig">原始</option>
+              <option value="1:1">1:1</option>
+              <option value="4:5">4:5（IG 直立）</option>
+              <option value="16:9">16:9</option>
+              <option value="3:2">3:2</option>
+              <option value="4:3">4:3</option>
+              <option value="9:16">9:16（直立）</option>
+            </select>
+            <button id="crop-reset" class="px-3 py-1 text-[11px] tracking-wider rounded hover:bg-ink hover:text-bg">重設</button>
+            <button id="crop-cancel" class="px-3 py-1 text-[11px] tracking-wider rounded hover:bg-ink hover:text-bg">取消</button>
+            <button id="crop-apply" class="px-3 py-1 text-[11px] tracking-wider rounded bg-accent text-bg hover:opacity-90">套用</button>
+          </div>
+        </div>
+        <div id="preview-empty" class="bg-surface rounded-lg shadow-deep w-[680px] h-[440px] flex flex-col items-center justify-center gap-3 px-12 text-center">
+          <span class="material-symbols-outlined text-7xl text-line">add_photo_alternate</span>
+          <div class="font-sans font-semibold text-2xl text-ink mt-4 tracking-tight">Lightbox</div>
+          <div class="text-sm text-muted">點擊頂部 <em class="text-accent not-italic font-medium">開啟</em> 載入照片（支援 JPG / TIFF / RAW · CR3 / NEF / ARW…）</div>
+        </div>
+      </div>
+      <!-- Floating EXIF -->
+      <div class="absolute top-5 left-5 bg-surface/95 backdrop-blur-sm border border-line rounded-full px-4 py-1.5 text-[11px] font-mono tnum tracking-wider uppercase text-ink/80 hidden" id="exif-strip">
+        <span id="exif-text">ISO 200 · f/4 · 1/250s · 85mm</span>
+      </div>
+      <!-- Floating zoom + status -->
+      <div class="absolute bottom-5 left-5 flex items-center gap-3">
+        <button id="btn-fit" class="px-3 py-1 bg-surface/95 backdrop-blur-sm border border-line rounded-full text-[11px] hover:bg-ink hover:text-bg transition-colors flex items-center gap-1" title="適合畫面（F 鍵）">
+          <span class="material-symbols-outlined text-[14px]">fit_screen</span>適合
+        </button>
+        <button id="btn-actual" class="px-3 py-1 bg-surface/95 backdrop-blur-sm border border-line rounded-full text-[11px] hover:bg-ink hover:text-bg transition-colors flex items-center gap-1" title="實際像素 100%（1 鍵）">
+          <span class="material-symbols-outlined text-[14px]">crop_free</span>1:1
+        </button>
+        <span class="text-[11px] tnum font-mono bg-surface/95 backdrop-blur-sm border border-line rounded-full px-2.5 py-0.5 text-ink/80 hidden" id="zoom-badge">100%</span>
+        <span class="text-[11px] text-ink/70 font-mono" id="status-line">等待載入相片</span>
+      </div>
+      <!-- Zoom hint (first-time) -->
+      <div class="absolute top-5 right-5 bg-surface/95 backdrop-blur-sm border border-line rounded-full px-3 py-1 text-[10px] tracking-widest text-muted hidden" id="zoom-hint">
+        <span class="material-symbols-outlined text-[12px] align-middle">drag_pan</span> 滾輪：縮放　拖曳：平移　雙擊：適合 / 100%
+      </div>
+    </main>
+
+    <!-- Right rail: histogram + accordion sliders -->
+    <aside class="border-l border-line bg-bg flex flex-col overflow-hidden">
+
+      <!-- Histogram (LR-style) -->
+      <div class="px-4 pt-4 pb-3 border-b border-line">
+        <div class="flex items-baseline justify-between mb-2">
+          <span class="text-[10px] tracking-widest text-muted">直方圖 · Histogram</span>
+          <span class="text-[10px] tracking-widest text-muted tnum" id="hist-stats">—</span>
+        </div>
+        <div id="hist-wrap" class="bg-surface rounded h-[110px] relative cursor-crosshair select-none overflow-hidden">
+          <canvas id="histogram-canvas" class="w-full h-full block" width="400" height="160"></canvas>
+
+          <!-- Clipping indicators (only visible when actually clipping) -->
+          <button id="hist-clip-shadow" class="absolute top-1 left-1 w-2.5 h-2.5 rounded-sm transition-opacity opacity-0" title="陰影裁切"></button>
+          <button id="hist-clip-high" class="absolute top-1 right-1 w-2.5 h-2.5 rounded-sm transition-opacity opacity-0" title="亮部裁切"></button>
+
+          <!-- Hover crosshair + readout (hidden until hover) -->
+          <div id="hist-cursor" class="absolute top-0 bottom-0 w-px bg-ink/30 pointer-events-none hidden" style="left:0"></div>
+          <div id="hist-zone-label" class="absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-ink text-bg text-[10px] tracking-wider rounded pointer-events-none hidden"></div>
+        </div>
+      </div>
+
+      <!-- Accordion modules -->
+      <div class="flex-1 overflow-y-auto panel-scroll" id="acc-container">
+
+        <!-- Presets (Film Simulation LUTs) -->
+        <section class="acc is-open" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">預設集 <span class="text-muted text-xs font-normal">· Presets · 底片模擬</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">★</span>
+          </header>
+          <div class="acc-body">
+            <div class="grid grid-cols-3 gap-1.5 mb-3" id="preset-grid">
+              <button data-preset="" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors active-preset">None</button>
+              <button data-preset="PROVIA.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Provia</button>
+              <button data-preset="Velvia.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Velvia</button>
+              <button data-preset="ASTIA.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">ASTIA</button>
+              <button data-preset="CC.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">CClassic</button>
+              <button data-preset="CN.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">CNeg</button>
+              <button data-preset="PRO_Neg.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Pro Neg</button>
+              <button data-preset="ETERNA.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Eterna</button>
+              <button data-preset="ETERNA-BB.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Eterna BB</button>
+              <button data-preset="REALA-ACE.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Reala ACE</button>
+            </div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">不透明度 <span class="opacity-60">Opacity</span></label><span class="font-mono tnum text-xs text-ink">100</span></div><input class="pen-slider" data-param="lut_opacity" data-scale="1" max="100" min="0" type="range" value="100"/></div>
+            <!-- Treatment toggle -->
+            <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
+              <span class="text-[10px] tracking-widest text-muted">處理 · Treatment</span>
+              <div class="flex gap-1">
+                <button id="btn-treat-color" class="treat-btn px-3 py-1 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg" data-treatment="color">彩色</button>
+                <button id="btn-treat-bw" class="treat-btn px-3 py-1 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg" data-treatment="bw">黑白</button>
+              </div>
+            </div>
+            <!-- Flip / Rotate -->
+            <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
+              <span class="text-[10px] tracking-widest text-muted">變形 · Transform</span>
+              <div class="flex gap-1">
+                <button id="btn-flip-h" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Flip horizontal">
+                  <span class="material-symbols-outlined text-[16px]">flip</span>
+                </button>
+                <button id="btn-flip-v" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Flip vertical">
+                  <span class="material-symbols-outlined text-[16px] rotate-90 inline-block">flip</span>
+                </button>
+                <button id="btn-rot-l" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Rotate -90°">
+                  <span class="material-symbols-outlined text-[16px]">rotate_left</span>
+                </button>
+                <button id="btn-rot-r" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Rotate +90°">
+                  <span class="material-symbols-outlined text-[16px]">rotate_right</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- Light -->
+        <section class="acc is-open" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined chev text-[18px]">chevron_right</span>
+              <span class="font-sans font-semibold text-sm tracking-tight">光線 <span class="text-muted text-xs font-normal">· Light</span></span>
+            </div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">01</span>
+          </header>
+          <div class="acc-body space-y-2.5">
+            <div class="flex items-center gap-2 mb-2">
+              <button id="btn-auto-tone" class="flex-1 px-3 py-1.5 bg-accent text-bg text-[11px] tracking-widest rounded hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[14px]">auto_fix_high</span>自動色調
+              </button>
+              <button id="btn-reset-light" class="px-3 py-1.5 border border-line text-[11px] tracking-widest rounded hover:bg-ink hover:text-bg transition-colors" title="重設光線區滑桿">重設</button>
+            </div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">曝光度 <span class="opacity-60">Exposure</span></label><span class="font-mono tnum text-xs text-ink">+0.0</span></div><input class="pen-slider" data-param="exposure" data-scale="100" data-format="ev" max="5" min="-5" step="0.1" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">對比 <span class="opacity-60">Contrast</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="contrast" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">亮部 <span class="opacity-60">Highlights</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="highlights" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">陰影 <span class="opacity-60">Shadows</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="shadows" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">白色 <span class="opacity-60">Whites</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="whites" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">黑色 <span class="opacity-60">Blacks</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="blacks" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">清晰度 <span class="opacity-60">Clarity</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="clarity" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">去朦朧 <span class="opacity-60">Dehaze</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="dehaze" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+          </div>
+        </section>
+
+        <!-- Color -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">色彩 <span class="text-muted text-xs font-normal">· Color</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">02</span>
+          </header>
+          <div class="acc-body space-y-2.5">
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">色溫 <span class="opacity-60">Temperature</span></label><span class="font-mono tnum text-xs text-ink">5500K</span></div><input class="pen-slider" data-param="wb_temperature" data-scale="1" max="10000" min="2000" type="range" value="5500"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">色調 <span class="opacity-60">Tint</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="wb_tint" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">鮮豔度 <span class="opacity-60">Vibrance</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="vibrance" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">飽和度 <span class="opacity-60">Saturation</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="saturation" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+          </div>
+        </section>
+
+        <!-- Curves -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">色調曲線 <span class="text-muted text-xs font-normal">· Curves</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">2a</span>
+          </header>
+          <div class="acc-body">
+            <div class="flex gap-1 mb-3" id="curve-tabs">
+              <button data-curve-tab="rgb" class="curve-tab flex-1 py-1 text-[10px] uppercase tracking-wider rounded border border-accent bg-accent text-bg">RGB</button>
+              <button data-curve-tab="r" class="curve-tab flex-1 py-1 text-[10px] uppercase tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">R</button>
+              <button data-curve-tab="g" class="curve-tab flex-1 py-1 text-[10px] uppercase tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">G</button>
+              <button data-curve-tab="b" class="curve-tab flex-1 py-1 text-[10px] uppercase tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">B</button>
+            </div>
+            <div class="bg-surface rounded border border-line p-2 mb-2">
+              <svg id="curve-svg" viewBox="0 0 256 256" class="w-full h-[200px] cursor-crosshair">
+                <!-- grid -->
+                <line x1="0"   y1="64"  x2="256" y2="64"  stroke="#E5DCC9" stroke-width="0.5"/>
+                <line x1="0"   y1="128" x2="256" y2="128" stroke="#E5DCC9" stroke-width="0.5"/>
+                <line x1="0"   y1="192" x2="256" y2="192" stroke="#E5DCC9" stroke-width="0.5"/>
+                <line x1="64"  y1="0"   x2="64"  y2="256" stroke="#E5DCC9" stroke-width="0.5"/>
+                <line x1="128" y1="0"   x2="128" y2="256" stroke="#E5DCC9" stroke-width="0.5"/>
+                <line x1="192" y1="0"   x2="192" y2="256" stroke="#E5DCC9" stroke-width="0.5"/>
+                <line x1="0" y1="256" x2="256" y2="0" stroke="#B8AFA0" stroke-width="0.5" stroke-dasharray="2,3"/>
+                <path id="curve-path" d="" stroke="#4A1F38" stroke-width="2" fill="none"/>
+                <g id="curve-points"></g>
+              </svg>
+            </div>
+            <button id="btn-curve-reset" class="text-[10px] tracking-wider text-muted hover:text-ink">重設曲線 · Reset</button>
+          </div>
+        </section>
+
+        <!-- HSL · Hue/Saturation/Luminance per-color (LR signature feature) -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">色相分區 <span class="text-muted text-xs font-normal">· HSL</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">2b</span>
+          </header>
+          <div class="acc-body">
+            <div class="flex gap-1 mb-3" id="hsl-tabs">
+              <button data-hsl-tab="hue" class="hsl-tab flex-1 py-1.5 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg">色相</button>
+              <button data-hsl-tab="saturation" class="hsl-tab flex-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">飽和</button>
+              <button data-hsl-tab="luminance" class="hsl-tab flex-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">明度</button>
+            </div>
+            <div class="space-y-2" id="hsl-grid">
+              <!-- 8 hues — each row contains 3 sliders that swap on tab change -->
+              <!-- We render only the active tab's 8 sliders, generated by JS -->
+            </div>
+          </div>
+        </section>
+
+        <!-- Detail (LR-style: Sharpening + Noise Reduction subgroups) -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">細節 <span class="text-muted text-xs font-normal">· Detail</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">03</span>
+          </header>
+          <div class="acc-body space-y-4">
+            <!-- Texture (presence-style) -->
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">紋理 <span class="opacity-60">Texture</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="texture" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+
+            <!-- Sharpening subgroup -->
+            <div class="pt-2 border-t border-line">
+              <div class="text-[10px] tracking-widest text-accent mb-2 font-semibold">銳化 · Sharpening</div>
+              <div class="space-y-2.5">
+                <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">總量 <span class="opacity-60">Amount</span></label><span class="font-mono tnum text-xs text-ink">0</span></div><input class="pen-slider" data-param="sharpening" data-scale="1" max="100" min="0" type="range" value="0"/></div>
+                <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">遮色片 <span class="opacity-60">Masking</span></label><span class="font-mono tnum text-xs text-ink">20</span></div><input class="pen-slider" data-param="detail_mask" data-scale="1" max="100" min="0" type="range" value="20"/></div>
+              </div>
+            </div>
+
+            <!-- AI Denoise (SCUNet, GPU-accelerated) -->
+            <div class="pt-2 border-t border-line">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-[10px] tracking-widest text-accent font-semibold">AI 神經網路去噪 · AI Denoise</div>
+                <span class="text-[9px] tracking-widest text-muted font-mono" id="ai-provider">—</span>
+              </div>
+              <button id="btn-ai-denoise" class="w-full px-3 py-2 text-xs tracking-wider rounded bg-accent text-bg hover:bg-ink flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-[16px]">auto_awesome</span>執行 SCUNet（LR 等級）
+              </button>
+              <div class="text-[10px] text-muted mt-1.5 italic">SCUNet · CVPR 2022 · GPU ~1 秒 / CPU ~17 秒</div>
+            </div>
+
+            <!-- Noise Reduction subgroup -->
+            <div class="pt-2 border-t border-line">
+              <div class="text-[10px] tracking-widest text-accent mb-2 font-semibold">傳統雜訊減少 · Traditional NR</div>
+              <div class="space-y-2.5">
+                <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">明度雜訊 <span class="opacity-60">Luminance</span></label><span class="font-mono tnum text-xs text-ink">0</span></div><input class="pen-slider" data-param="noise_reduction" data-scale="1" max="100" min="0" type="range" value="0"/></div>
+                <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted pl-3">— 細節 <span class="opacity-60">Detail</span></label><span class="font-mono tnum text-xs text-ink">50</span></div><input class="pen-slider" data-param="noise_lum_detail" data-scale="1" max="100" min="0" type="range" value="50"/></div>
+                <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">顏色雜訊 <span class="opacity-60">Color</span></label><span class="font-mono tnum text-xs text-ink">0</span></div><input class="pen-slider" data-param="noise_color" data-scale="1" max="100" min="0" type="range" value="0"/></div>
+                <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted pl-3">— 細節 <span class="opacity-60">Detail</span></label><span class="font-mono tnum text-xs text-ink">50</span></div><input class="pen-slider" data-param="noise_color_detail" data-scale="1" max="100" min="0" type="range" value="50"/></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Effects -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">效果 <span class="text-muted text-xs font-normal">· Effects</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">04</span>
+          </header>
+          <div class="acc-body space-y-2.5">
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">暈影 <span class="opacity-60">Vignette</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="vignette_amount" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">暈影中點 <span class="opacity-60">Mid</span></label><span class="font-mono tnum text-xs text-ink">50</span></div><input class="pen-slider" data-param="vignette_midpoint" data-scale="1" max="100" min="0" type="range" value="50"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">顆粒 <span class="opacity-60">Grain</span></label><span class="font-mono tnum text-xs text-ink">0</span></div><input class="pen-slider" data-param="grain_amount" data-scale="1" max="100" min="0" type="range" value="0"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">顆粒大小 <span class="opacity-60">Size</span></label><span class="font-mono tnum text-xs text-ink">25</span></div><input class="pen-slider" data-param="grain_size" data-scale="1" max="100" min="0" type="range" value="25"/></div>
+          </div>
+        </section>
+
+        <!-- Split Toning -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">分離色調 <span class="text-muted text-xs font-normal">· Split Tone</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">04b</span>
+          </header>
+          <div class="acc-body space-y-3">
+            <div class="text-[10px] tracking-widest text-accent font-semibold">亮部 · Highlights</div>
+            <div class="space-y-2">
+              <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">色相 <span class="opacity-60">Hue</span></label><span class="font-mono tnum text-xs text-ink">0°</span></div><input class="pen-slider" data-param="split_highlights_hue" data-scale="1" max="360" min="0" type="range" value="0"/></div>
+              <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">飽和度 <span class="opacity-60">Saturation</span></label><span class="font-mono tnum text-xs text-ink">0</span></div><input class="pen-slider" data-param="split_highlights_sat" data-scale="1" max="100" min="0" type="range" value="0"/></div>
+            </div>
+            <div class="text-[10px] tracking-widest text-accent font-semibold pt-2 border-t border-line">暗部 · Shadows</div>
+            <div class="space-y-2">
+              <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">色相 <span class="opacity-60">Hue</span></label><span class="font-mono tnum text-xs text-ink">0°</span></div><input class="pen-slider" data-param="split_shadows_hue" data-scale="1" max="360" min="0" type="range" value="0"/></div>
+              <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">飽和度 <span class="opacity-60">Saturation</span></label><span class="font-mono tnum text-xs text-ink">0</span></div><input class="pen-slider" data-param="split_shadows_sat" data-scale="1" max="100" min="0" type="range" value="0"/></div>
+            </div>
+            <div class="slr pt-2 border-t border-line"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">平衡 <span class="opacity-60">Balance</span></label><span class="font-mono tnum text-xs text-ink">+0</span></div><input class="pen-slider" data-param="split_balance" data-scale="1" max="100" min="-100" type="range" value="0"/></div>
+          </div>
+        </section>
+
+        <!-- Geometry -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">幾何 <span class="text-muted text-xs font-normal">· Geometry</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">05</span>
+          </header>
+          <div class="acc-body space-y-2.5">
+            <div class="flex items-center gap-2 mb-1">
+              <button id="btn-enter-crop" class="flex-1 px-3 py-1.5 bg-accent text-bg text-[11px] tracking-widest rounded hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5">
+                <span class="material-symbols-outlined text-[14px]">crop</span>進入裁切
+              </button>
+              <button id="btn-reset-crop" class="px-3 py-1.5 border border-line text-[11px] tracking-widest rounded hover:bg-ink hover:text-bg transition-colors" title="清除裁切">清除</button>
+            </div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">旋轉 <span class="opacity-60">Rotation</span></label><span class="font-mono tnum text-xs text-ink">+0.0°</span></div><input class="pen-slider" data-param="rotation" data-scale="1" max="45" min="-45" step="0.5" type="range" value="0"/></div>
+          </div>
+        </section>
+
+        <!-- Frame · 加框 -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">邊框 <span class="text-muted text-xs font-normal">· Frame</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">06</span>
+          </header>
+          <div class="acc-body space-y-3">
+            <label class="flex items-center justify-between cursor-pointer">
+              <span class="text-[11px] tracking-wider text-muted">啟用邊框 <span class="opacity-60">Enable</span></span>
+              <input id="border-enable" type="checkbox" class="accent-accent w-4 h-4"/>
+            </label>
+            <div class="pt-2 border-t border-line">
+              <div class="text-[10px] tracking-widest text-muted mb-1.5">樣板 · Template</div>
+              <div class="grid grid-cols-3 gap-1">
+                <button data-border="template" data-value="CLASSIC" class="border-opt active-bord px-2 py-1.5 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg">經典</button>
+                <button data-border="template" data-value="ROUNDED" class="border-opt px-2 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">圓角</button>
+                <button data-border="template" data-value="SPLIT" class="border-opt px-2 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">分割</button>
+              </div>
+            </div>
+            <div class="pt-2 border-t border-line">
+              <div class="text-[10px] tracking-widest text-muted mb-1.5">比例 · Aspect</div>
+              <div class="grid grid-cols-4 gap-1">
+                <button data-border="aspect_ratio" data-value="ORIGINAL" class="border-opt active-bord px-1 py-1.5 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg">原始</button>
+                <button data-border="aspect_ratio" data-value="SQUARE_1_1" class="border-opt px-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">1:1</button>
+                <button data-border="aspect_ratio" data-value="PORTRAIT_4_5" class="border-opt px-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">4:5</button>
+                <button data-border="aspect_ratio" data-value="LANDSCAPE_16_9" class="border-opt px-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">16:9</button>
+              </div>
+            </div>
+            <div class="pt-2 border-t border-line">
+              <div class="text-[10px] tracking-widest text-muted mb-1.5">大小 · Size</div>
+              <div class="grid grid-cols-4 gap-1">
+                <button data-border="border_preset" data-value="THIN" class="border-opt px-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">細</button>
+                <button data-border="border_preset" data-value="MEDIUM" class="border-opt active-bord px-1 py-1.5 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg">中</button>
+                <button data-border="border_preset" data-value="THICK" class="border-opt px-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">粗</button>
+                <button data-border="border_preset" data-value="MAGAZINE" class="border-opt px-1 py-1.5 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg">雜誌</button>
+              </div>
+            </div>
+            <div class="pt-2 border-t border-line space-y-2">
+              <label class="flex items-center justify-between cursor-pointer">
+                <span class="text-[11px] tracking-wider text-muted">顯示品牌 <span class="opacity-60">Logo</span></span>
+                <input data-border-bool="show_logo" type="checkbox" class="accent-accent w-4 h-4"/>
+              </label>
+              <label class="flex items-center justify-between cursor-pointer">
+                <span class="text-[11px] tracking-wider text-muted">顯示 EXIF</span>
+                <input data-border-bool="show_exif" type="checkbox" class="accent-accent w-4 h-4"/>
+              </label>
+              <label class="flex items-center justify-between cursor-pointer">
+                <span class="text-[11px] tracking-wider text-muted">模糊背景 <span class="opacity-60">Blur Bg</span></span>
+                <input data-border-bool="blur_background" type="checkbox" class="accent-accent w-4 h-4"/>
+              </label>
+            </div>
+            <div class="pt-2 border-t border-line">
+              <label class="flex items-center justify-between cursor-pointer">
+                <span class="text-[11px] tracking-wider text-muted">背景顏色 <span class="opacity-60">Background</span></span>
+                <input id="border-bg-color" type="color" value="#FFFFFF" class="w-14 h-7 rounded border border-line cursor-pointer"/>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Output / Export options + actions -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">輸出 <span class="text-muted text-xs font-normal">· Output</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">07</span>
+          </header>
+          <div class="acc-body space-y-3">
+            <div>
+              <div class="text-[10px] tracking-widest text-muted mb-1.5">格式 · Format</div>
+              <select id="exp-fmt" class="w-full px-2 py-1.5 text-xs rounded border border-line bg-surface text-ink">
+                <option>JPEG</option><option>PNG</option><option>TIFF</option><option>WEBP</option>
+              </select>
+            </div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">品質 <span class="opacity-60">Quality</span></label><span class="font-mono tnum text-xs text-ink" id="exp-q-label">92</span></div><input id="exp-q" class="pen-slider" max="100" min="50" type="range" value="92"/></div>
+            <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">長邊 <span class="opacity-60">Long Edge</span></label><span class="font-mono tnum text-xs text-ink" id="exp-le-label">原始</span></div><input id="exp-le" class="pen-slider" max="6000" min="0" step="100" type="range" value="0"/></div>
+            <p class="text-[10px] text-muted leading-relaxed pt-2 border-t border-line">這裡是輸出設定。<br>頂部工具列：<span class="text-ink">輸出</span>（單張）／<span class="text-ink">批次</span>（多張）／<span class="text-ink">發佈</span>（IG）共用此設定。</p>
+          </div>
+        </section>
+
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- Batch Wizard modal — LR-grade Export dialog -->
+<div id="batch-modal" class="fixed inset-0 z-50 hidden bg-ink/70 backdrop-blur-sm items-center justify-center">
+  <div class="bg-surface rounded-xl shadow-deep border border-line w-[640px] max-h-[92vh] overflow-y-auto p-6 space-y-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-baseline gap-2">
+        <span class="material-symbols-outlined text-accent text-[22px]">stacks</span>
+        <h3 class="font-sans font-semibold text-lg tracking-tight">批次處理 · Batch Export</h3>
+      </div>
+      <button id="batch-close" class="text-muted hover:text-ink"><span class="material-symbols-outlined text-[18px]">close</span></button>
+    </div>
+
+    <!-- Step 1: files -->
+    <div class="space-y-1">
+      <label class="text-[11px] tracking-wider text-muted">① 來源檔案</label>
+      <div class="flex items-center gap-2">
+        <button id="batch-pick-files" class="px-3 py-1.5 text-xs tracking-wider rounded border border-line hover:bg-ink hover:text-bg flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[14px]">folder_open</span>選擇檔案
+        </button>
+        <span id="batch-files-info" class="text-xs text-muted">（尚未選擇）</span>
+      </div>
+    </div>
+
+    <!-- Step 2: out dir -->
+    <div class="space-y-1">
+      <label class="text-[11px] tracking-wider text-muted">② 輸出資料夾</label>
+      <div class="flex items-center gap-2">
+        <button id="batch-pick-dir" class="px-3 py-1.5 text-xs tracking-wider rounded border border-line hover:bg-ink hover:text-bg flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[14px]">drive_folder_upload</span>選擇資料夾
+        </button>
+        <span id="batch-dir-info" class="text-xs text-muted truncate">（取消＝原檔同目錄）</span>
+      </div>
+    </div>
+
+    <!-- Step 3: filename template + collision -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="space-y-1">
+        <label class="text-[11px] tracking-wider text-muted">③ 檔名範本</label>
+        <input id="batch-template" type="text" value="{name}_graded" class="w-full px-2 py-1.5 text-xs font-mono rounded border border-line bg-bg text-ink"/>
+        <div class="text-[10px] text-muted leading-relaxed">tokens: <span class="font-mono text-ink/80">{name}</span> 原檔名 · <span class="font-mono text-ink/80">{seq}</span> 序號 · <span class="font-mono text-ink/80">{date}</span> 日期 · <span class="font-mono text-ink/80">{datetime}</span> · <span class="font-mono text-ink/80">{ext}</span></div>
+      </div>
+      <div class="space-y-1">
+        <label class="text-[11px] tracking-wider text-muted">④ 衝突處理</label>
+        <div class="flex flex-col gap-1 text-xs">
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="batch-collision" value="increment" class="accent-accent" checked/>自動編號（保留舊檔）</label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="batch-collision" value="overwrite" class="accent-accent"/>覆寫</label>
+          <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="batch-collision" value="skip" class="accent-accent"/>跳過</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: selective sync -->
+    <div class="space-y-1">
+      <label class="text-[11px] tracking-wider text-muted">⑤ 套用哪些設定（取消勾選＝該組不套用）</label>
+      <div class="grid grid-cols-5 gap-1.5 text-xs" id="batch-groups">
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="light" checked/>光線</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="color" checked/>色彩</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="detail" checked/>細節</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="effects" checked/>效果</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="splittone" checked/>分離色調</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="hsl" checked/>HSL</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="curves" checked/>曲線</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="lut" checked/>LUT</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="geometry" checked/>幾何</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="crop" checked/>裁切</label>
+      </div>
+      <div class="flex gap-2 mt-1">
+        <button id="batch-groups-all" type="button" class="text-[10px] tracking-wider text-muted hover:text-ink">全選</button>
+        <button id="batch-groups-none" type="button" class="text-[10px] tracking-wider text-muted hover:text-ink">全不選</button>
+      </div>
+    </div>
+
+    <!-- Step 6: auto tone toggle -->
+    <label class="flex items-center justify-between cursor-pointer pt-1 border-t border-line">
+      <span class="text-xs tracking-wider text-ink">⑥ 每張獨立 Auto Tone（再套用其他設定）</span>
+      <input id="batch-auto-tone" type="checkbox" class="accent-accent w-4 h-4"/>
+    </label>
+
+    <!-- Output settings inherited from accordion -->
+    <div class="text-[10px] text-muted bg-bg border border-line rounded p-2 leading-relaxed">
+      格式 / 品質 / 長邊 沿用「輸出」section 設定（目前：<span id="batch-fmt-echo" class="font-mono text-ink/80">JPEG · Q92</span>）
+    </div>
+
+    <!-- Progress (shown during run) -->
+    <div id="batch-progress-wrap" class="hidden space-y-1.5 pt-1 border-t border-line">
+      <div class="flex items-baseline justify-between">
+        <span class="text-[11px] tracking-wider text-muted">進度</span>
+        <span id="batch-progress-text" class="text-xs font-mono tnum text-ink">0 / 0</span>
+      </div>
+      <div class="h-2 bg-bg border border-line rounded overflow-hidden">
+        <div id="batch-progress-bar" class="h-full bg-accent transition-all" style="width:0%"></div>
+      </div>
+      <div id="batch-progress-current" class="text-[10px] font-mono text-muted truncate">—</div>
+    </div>
+
+    <!-- Action row -->
+    <div class="flex gap-2 justify-end pt-2 border-t border-line">
+      <button id="batch-cancel" class="px-4 py-2 text-xs tracking-wider rounded border border-line hover:bg-ink hover:text-bg">取消</button>
+      <button id="batch-stop" class="hidden px-4 py-2 text-xs tracking-wider rounded border border-accent text-accent hover:bg-accent hover:text-bg">中止</button>
+      <button id="batch-start" class="px-5 py-2 text-xs tracking-wider rounded bg-accent text-bg hover:opacity-90 flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-[14px]">play_arrow</span>開始批次處理
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- IG Publish modal — customizable post composer -->
+<div id="ig-modal" class="fixed inset-0 z-50 hidden bg-ink/70 backdrop-blur-sm items-center justify-center">
+  <div class="bg-surface rounded-xl shadow-deep border border-line w-[560px] max-h-[90vh] overflow-y-auto p-6 space-y-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-baseline gap-2">
+        <span class="material-symbols-outlined text-accent text-[22px]">share</span>
+        <h3 class="font-sans font-semibold text-lg tracking-tight">發佈至 Instagram</h3>
+      </div>
+      <button id="ig-close" class="text-muted hover:text-ink"><span class="material-symbols-outlined text-[18px]">close</span></button>
+    </div>
+
+    <!-- Caption -->
+    <div>
+      <div class="flex items-baseline justify-between mb-1">
+        <label class="text-[11px] tracking-wider text-muted">內文 · Caption</label>
+        <span id="ig-caption-count" class="text-[10px] tnum font-mono text-muted">0 / 2200</span>
+      </div>
+      <textarea id="ig-caption" maxlength="2200" class="w-full h-28 p-3 text-sm border border-line rounded bg-bg text-ink resize-none focus:outline-none focus:border-accent" placeholder="寫個有故事的 caption…"></textarea>
+    </div>
+
+    <!-- Hashtags (separate so they format cleanly) -->
+    <div>
+      <div class="flex items-baseline justify-between mb-1">
+        <label class="text-[11px] tracking-wider text-muted">標籤 · Hashtags <span class="opacity-60">（用空白分隔）</span></label>
+        <span id="ig-hash-count" class="text-[10px] tnum font-mono text-muted">0 / 30</span>
+      </div>
+      <textarea id="ig-hashtags" class="w-full h-16 p-3 text-sm border border-line rounded bg-bg text-ink resize-none focus:outline-none focus:border-accent font-mono" placeholder="#sunset #portrait #fujifilm"></textarea>
+      <div class="flex flex-wrap gap-1 mt-1.5" id="ig-hash-suggest">
+        <button type="button" data-tag="#streetphotography" class="ig-hash-chip text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg">#streetphotography</button>
+        <button type="button" data-tag="#filmlook" class="ig-hash-chip text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg">#filmlook</button>
+        <button type="button" data-tag="#portrait" class="ig-hash-chip text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg">#portrait</button>
+        <button type="button" data-tag="#fujifilm" class="ig-hash-chip text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg">#fujifilm</button>
+        <button type="button" data-tag="#somewheremagazine" class="ig-hash-chip text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg">#somewheremagazine</button>
+        <button type="button" data-tag="#minimalmood" class="ig-hash-chip text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg">#minimalmood</button>
+      </div>
+    </div>
+
+    <!-- Location -->
+    <div>
+      <label class="text-[11px] tracking-wider text-muted mb-1 block">地點 · Location <span class="opacity-60">（可選）</span></label>
+      <input id="ig-location" type="text" class="w-full px-3 py-2 text-sm border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent" placeholder="例：Taipei, Taiwan"/>
+    </div>
+
+    <!-- Toggles -->
+    <div class="space-y-2 pt-1 border-t border-line">
+      <label class="flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] tracking-wider text-muted">附上 EXIF 資訊 <span class="opacity-60">（相機·鏡頭·光圈·快門·ISO）</span></span>
+        <input id="ig-add-exif" type="checkbox" class="accent-accent w-4 h-4"/>
+      </label>
+      <label class="flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] tracking-wider text-muted">標籤獨立成一段（兩個換行隔開）</span>
+        <input id="ig-hash-newline" type="checkbox" class="accent-accent w-4 h-4" checked/>
+      </label>
+      <label class="flex items-center justify-between cursor-pointer">
+        <span class="text-[11px] tracking-wider text-muted">附上 PicLab 浮水印標 <span class="opacity-60">#editedinpiclab</span></span>
+        <input id="ig-add-watermark" type="checkbox" class="accent-accent w-4 h-4"/>
+      </label>
+    </div>
+
+    <!-- Preview -->
+    <div class="pt-1 border-t border-line">
+      <div class="text-[11px] tracking-wider text-muted mb-1">預覽 · Preview</div>
+      <pre id="ig-preview" class="text-xs text-ink/80 bg-bg border border-line rounded p-3 max-h-32 overflow-auto whitespace-pre-wrap font-mono leading-relaxed">（即時預覽會顯示在這裡）</pre>
+    </div>
+
+    <div class="text-[10px] text-muted font-mono">需 .env 中設好 <span class="text-ink">IG_ACCESS_TOKEN</span> 與 <span class="text-ink">IG_USER_ID</span> · 需聯網</div>
+
+    <div class="flex gap-2 justify-end pt-2">
+      <button id="ig-cancel" class="px-4 py-2 text-xs tracking-wider rounded border border-line hover:bg-ink hover:text-bg">取消</button>
+      <button id="ig-confirm" class="px-4 py-2 text-xs tracking-wider rounded bg-accent text-bg hover:opacity-90 flex items-center gap-1.5">
+        <span class="material-symbols-outlined text-[14px]">send</span>發佈
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script src="bridge.js"></script>
+</body>
+</html>

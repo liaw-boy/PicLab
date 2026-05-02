@@ -25,8 +25,8 @@ class ThemeManager(QObject):
 
     def __init__(self):
         super().__init__()
-        self._theme = "paper"   # default: paper
-        T.apply_paper()
+        self._theme = "dark"   # default: Aurelian Dark
+        T.apply_dark()
 
     def set_theme(self, theme: str) -> None:
         """theme: 'dark' | 'light' | 'paper'"""

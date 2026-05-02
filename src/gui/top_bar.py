@@ -1,16 +1,12 @@
 """
-TopBar — Paper Wireframe 風格頂部工具列。高度 52px。
-所有按鈕使用 QPainter 自訂繪製，風格與左側 LeftNavBar 完全一致。
+TopBar — Aurelian Dark 頂部工具列。高度 44px。
+全部按鈕使用 QPainter 自訂繪製，零 Qt stylesheet 按鈕依賴。
 """
 from __future__ import annotations
 
-from PyQt6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QFrame,
-)
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QFrame
 from PyQt6.QtCore import Qt, pyqtSignal, QRect, QRectF
-from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QBrush, QFont, QFontMetrics, QPainterPath,
-)
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QFont, QPainterPath
 
 import src.gui.theme as T
 from src.models.settings import TemplateStyle
@@ -21,332 +17,278 @@ def _tm():
     return ThemeManager.instance()
 
 
-# ── 圖示繪製函式 ──────────────────────────────────────────────────────────────
+# ── Icon painters ──────────────────────────────────────────────────────────────
 
-def _draw_theme_icon(p: QPainter, cx: int, cy: int, col: QColor) -> None:
-    """主題切換：半實心圓（◑）"""
+def _draw_half_circle(p: QPainter, cx: int, cy: int, col: QColor) -> None:
+    """外觀按鈕圖示：半實心圓 ◑"""
     r = 6
     path = QPainterPath()
     path.moveTo(cx, cy - r)
     path.arcTo(QRectF(cx - r, cy - r, r * 2, r * 2), 90, 180)
     path.closeSubpath()
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QBrush(col))
-    p.drawPath(path)
-    pen = QPen(col, 1.5)
-    p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(col)); p.drawPath(path)
+    p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
     p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
 
 
 def _draw_export_icon(p: QPainter, cx: int, cy: int, col: QColor) -> None:
-    """匯出：向上箭頭 + 底線"""
     pen = QPen(col, 2, Qt.PenStyle.SolidLine,
                Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
     p.setPen(pen)
-    p.drawLine(cx - 7, cy + 6, cx + 7, cy + 6)
+    p.drawLine(cx - 6, cy + 5, cx + 6, cy + 5)
     p.drawLine(cx, cy + 2, cx, cy - 5)
-    p.drawLine(cx - 5, cy - 1, cx, cy - 6)
-    p.drawLine(cx + 5, cy - 1, cx, cy - 6)
+    p.drawLine(cx - 4, cy - 1, cx, cy - 5)
+    p.drawLine(cx + 4, cy - 1, cx, cy - 5)
 
 
-# ── 版型選擇按鈕（文字 Chip，QPainter，可選取）────────────────────────────────
+# ── Traffic-light window buttons ───────────────────────────────────────────────
 
-class _TplBtn(QWidget):
-    """版型 chip 按鈕 — QPainter 繪製，風格與 _NavBtn 一致。"""
-    clicked = pyqtSignal(object)   # emits TemplateStyle value
+class _WinBtn(QWidget):
+    clicked = pyqtSignal()
+    _ROLES = {
+        "close":    ("#FF5F57", "#E0443E"),
+        "minimize": ("#FEBC2E", "#D4A020"),
+        "maximize": ("#28C840", "#1DAA32"),
+    }
+    _D = 13
 
-    def __init__(self, style: TemplateStyle, label: str, parent=None):
+    def __init__(self, role: str, parent=None):
         super().__init__(parent)
-        self._style = style
-        self._label = label
-        self._active = False
-        self._hovered = False
-        self.setFixedSize(80, 32)
+        self._role = role; self._hovered = False
+        self.setFixedSize(self._D + 4, self._D + 4)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+
+    def enterEvent(self, e) -> None:
+        self._hovered = True;  self.update(); super().enterEvent(e)
+    def leaveEvent(self, e) -> None:
+        self._hovered = False; self.update(); super().leaveEvent(e)
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton: self.clicked.emit()
+
+    def paintEvent(self, _) -> None:
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        cx, cy = self.width() // 2, self.height() // 2; r = self._D // 2
+        normal, hover_c = self._ROLES[self._role]
+        col = QColor(hover_c if self._hovered else normal)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(QBrush(col))
+        p.drawEllipse(cx - r, cy - r, self._D, self._D)
+        if self._hovered:
+            p.setPen(QPen(QColor(0, 0, 0, 90), 1.4,
+                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            if self._role == "close":
+                d = 3
+                p.drawLine(cx - d, cy - d, cx + d, cy + d)
+                p.drawLine(cx + d, cy - d, cx - d, cy + d)
+            elif self._role == "minimize":
+                p.drawLine(cx - 3, cy, cx + 3, cy)
+            else:
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawRect(cx - 3, cy - 3, 6, 6)
+        p.end()
+
+
+# ── Step tab pill ──────────────────────────────────────────────────────────────
+
+class _StepTab(QWidget):
+    clicked = pyqtSignal(int)
+
+    def __init__(self, step: int, label: str, parent=None):
+        super().__init__(parent)
+        self._step = step; self._label = label
+        self._active = self._hovered = False
+        self.setFixedSize(68, 30)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         _tm().theme_changed.connect(lambda _: self.update())
 
     def set_active(self, v: bool) -> None:
-        self._active = v
-        self.update()
+        self._active = v; self.update()
 
     def enterEvent(self, e) -> None:
-        self._hovered = True
-        self.update()
-        super().enterEvent(e)
-
+        self._hovered = True;  self.update(); super().enterEvent(e)
     def leaveEvent(self, e) -> None:
-        self._hovered = False
-        self.update()
-        super().leaveEvent(e)
-
+        self._hovered = False; self.update(); super().leaveEvent(e)
     def mousePressEvent(self, e) -> None:
-        if e.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self._style)
+        if e.button() == Qt.MouseButton.LeftButton: self.clicked.emit(self._step)
 
     def paintEvent(self, _) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        W, H = self.width(), self.height()
-        R = T.R_CHIP
-        M = 2
-
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H, R, M = self.width(), self.height(), 6, 1
         if self._active:
-            p.setBrush(QBrush(QColor(T.GOLD)))
-            p.setPen(Qt.PenStyle.NoPen)
-            text_col = QColor(T.TEXT_ON_PRIMARY)
-            weight = QFont.Weight.Bold
+            p.setBrush(QBrush(QColor(T.GOLD))); p.setPen(Qt.PenStyle.NoPen)
+            text_col = QColor(T.TEXT_ON_PRIMARY); weight = QFont.Weight.Bold
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.GLASS_2)))
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            text_col = QColor(T.TEXT_PRIMARY)
-            weight = QFont.Weight.Medium
+            p.setBrush(QBrush(QColor(T.GLASS_2))); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            text_col = QColor(T.TEXT_PRIMARY); weight = QFont.Weight.Medium
         else:
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            text_col = QColor(T.TEXT_SECONDARY)
-            weight = QFont.Weight.Medium
-
+            p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            text_col = QColor("#BBBAC4"); weight = QFont.Weight.Medium
         p.drawRoundedRect(M, M, W - M * 2, H - M * 2, R, R)
-
-        p.setFont(T.ui_font(T.FONT_SM, weight))
-        p.setPen(QPen(text_col))
+        p.setFont(T.ui_font(T.FONT_SM, weight)); p.setPen(QPen(text_col))
         p.drawText(QRect(0, 0, W, H), Qt.AlignmentFlag.AlignCenter, self._label)
         p.end()
 
 
-# ── 頂部功能按鈕（圖示 + 文字，QPainter，風格與 _NavBtn 一致）────────────────
+# ── Template chip ──────────────────────────────────────────────────────────────
 
-class _TopBarBtn(QWidget):
-    """頂部工具列按鈕 — 圖示(左) + 文字(右)，QPainter 繪製。"""
-    clicked = pyqtSignal()
+class _TplChip(QWidget):
+    clicked = pyqtSignal(object)
 
-    _H = 36
-
-    def __init__(self, label: str, draw_fn, primary: bool = False, parent=None):
+    def __init__(self, style: TemplateStyle, label: str, parent=None):
         super().__init__(parent)
-        self._label = label
-        self._draw_fn = draw_fn
-        self._primary = primary
-        self._hovered = False
+        self._style = style; self._label = label
+        self._active = self._hovered = False
+        self.setFixedSize(64, 28)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        self.setFixedHeight(self._H)
-        w = QFontMetrics(T.ui_font(T.FONT_SM)).horizontalAdvance(label) + 32 + 20
-        self.setFixedWidth(max(w, 90))
+        _tm().theme_changed.connect(lambda _: self.update())
+
+    def set_active(self, v: bool) -> None:
+        self._active = v; self.update()
+
+    def enterEvent(self, e) -> None:
+        self._hovered = True;  self.update(); super().enterEvent(e)
+    def leaveEvent(self, e) -> None:
+        self._hovered = False; self.update(); super().leaveEvent(e)
+    def mousePressEvent(self, e) -> None:
+        if e.button() == Qt.MouseButton.LeftButton: self.clicked.emit(self._style)
+
+    def paintEvent(self, _) -> None:
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H, R, M = self.width(), self.height(), 6, 1
+        if self._active:
+            p.setBrush(QBrush(QColor(T.GOLD))); p.setPen(Qt.PenStyle.NoPen)
+            text_col = QColor(T.TEXT_ON_PRIMARY); weight = QFont.Weight.Bold
+        elif self._hovered:
+            p.setBrush(QBrush(QColor(T.GLASS_2))); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            text_col = QColor(T.TEXT_PRIMARY); weight = QFont.Weight.Medium
+        else:
+            p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            text_col = QColor(T.TEXT_SECONDARY); weight = QFont.Weight.Medium
+        p.drawRoundedRect(M, M, W - M * 2, H - M * 2, R, R)
+        p.setFont(T.ui_font(T.FONT_SM, weight)); p.setPen(QPen(text_col))
+        p.drawText(QRect(0, 0, W, H), Qt.AlignmentFlag.AlignCenter, self._label)
+        p.end()
+
+
+# ── Generic icon+label button ──────────────────────────────────────────────────
+
+class _IconBtn(QWidget):
+    """圖示 + 文字按鈕。primary=金色填充，否則 outlined 樣式。"""
+    clicked = pyqtSignal()
+    _H = 30
+
+    def __init__(self, label: str, draw_fn, width: int,
+                 primary: bool = False, parent=None):
+        super().__init__(parent)
+        self._label = label; self._draw_fn = draw_fn; self._primary = primary
+        self._hovered = False
+        self.setFixedSize(width, self._H)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         _tm().theme_changed.connect(lambda _: self.update())
 
     def setEnabled(self, enabled: bool) -> None:
-        self.setCursor(
-            Qt.CursorShape.PointingHandCursor if enabled
-            else Qt.CursorShape.ArrowCursor
-        )
-        super().setEnabled(enabled)
-        self.update()
+        self.setCursor(Qt.CursorShape.PointingHandCursor if enabled
+                       else Qt.CursorShape.ArrowCursor)
+        super().setEnabled(enabled); self.update()
 
     def enterEvent(self, e) -> None:
-        self._hovered = True
-        self.update()
-        super().enterEvent(e)
-
+        self._hovered = True;  self.update(); super().enterEvent(e)
     def leaveEvent(self, e) -> None:
-        self._hovered = False
-        self.update()
-        super().leaveEvent(e)
-
+        self._hovered = False; self.update(); super().leaveEvent(e)
     def mousePressEvent(self, e) -> None:
         if e.button() == Qt.MouseButton.LeftButton and self.isEnabled():
             self.clicked.emit()
 
     def paintEvent(self, _) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        W, H = self.width(), self.height()
-        R = T.R_CHIP
-        M = 2
-
-        enabled = self.isEnabled()
-
-        if not enabled:
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            icon_col = QColor(T.TEXT_DISABLED)
-            text_col = QColor(T.TEXT_DISABLED)
-            weight = QFont.Weight.Medium
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H, R, M = self.width(), self.height(), 6, 1
+        if not self.isEnabled():
+            p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            icon_col = text_col = QColor(T.TEXT_DISABLED); weight = QFont.Weight.Medium
         elif self._primary:
             bg = QColor(T.PRIMARY_HOVER if self._hovered else T.GOLD)
-            p.setBrush(QBrush(bg))
-            p.setPen(Qt.PenStyle.NoPen)
-            icon_col = QColor(T.TEXT_ON_PRIMARY)
-            text_col = QColor(T.TEXT_ON_PRIMARY)
-            weight = QFont.Weight.Bold
+            p.setBrush(QBrush(bg)); p.setPen(Qt.PenStyle.NoPen)
+            icon_col = text_col = QColor(T.TEXT_ON_PRIMARY); weight = QFont.Weight.Bold
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.GLASS_2)))
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            icon_col = QColor(T.TEXT_PRIMARY)
-            text_col = QColor(T.TEXT_PRIMARY)
-            weight = QFont.Weight.Medium
+            p.setBrush(QBrush(QColor(T.GLASS_2))); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            icon_col = text_col = QColor(T.TEXT_PRIMARY); weight = QFont.Weight.Medium
         else:
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            icon_col = QColor(T.TEXT_SECONDARY)
-            text_col = QColor(T.TEXT_SECONDARY)
-            weight = QFont.Weight.Medium
-
+            p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            icon_col = text_col = QColor(T.TEXT_SECONDARY); weight = QFont.Weight.Medium
         p.drawRoundedRect(M, M, W - M * 2, H - M * 2, R, R)
-
-        # 圖示（左側）
-        self._draw_fn(p, 18, H // 2, icon_col)
-
-        # 文字標籤（圖示右方）
-        p.setFont(T.ui_font(T.FONT_SM, weight))
-        p.setPen(QPen(text_col))
-        p.drawText(
-            QRect(34, 0, W - 38, H),
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-            self._label,
-        )
+        self._draw_fn(p, 16, H // 2, icon_col)
+        p.setFont(T.ui_font(T.FONT_SM, weight)); p.setPen(QPen(text_col))
+        p.drawText(QRect(28, 0, W - 32, H),
+                   Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                   self._label)
         p.end()
 
 
-# ── 頂部工具列 ────────────────────────────────────────────────────────────────
+# ── Sync toggle button ─────────────────────────────────────────────────────────
 
-def _draw_link_on(p: QPainter, cx: int, cy: int, col: QColor) -> None:
-    """連接狀態：兩個相扣的鏈環（實線）"""
-    pen = QPen(col, 2.0, Qt.PenStyle.SolidLine,
-               Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    # 左鏈環（水平膠囊形，右側進入右環）
-    p.drawRoundedRect(QRectF(cx - 12, cy - 4, 13, 8), 4, 4)
-    # 右鏈環（覆蓋左環右側，形成相扣效果）
-    p.drawRoundedRect(QRectF(cx - 1, cy - 4, 13, 8), 4, 4)
-    # 遮住左環右半多餘的線（用背景色填充中心重疊區）
-    overlap_col = QColor(col); overlap_col.setAlpha(0)
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QBrush(QColor(col)))
-    # 在兩環交叉處畫一條實色遮蓋線，產生「環扣」立體感
-    bar_pen = QPen(col, 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.FlatCap)
-    p.setPen(bar_pen)
-    p.drawLine(cx - 1, cy - 2, cx - 1, cy + 2)
-
-
-def _draw_link_off(p: QPainter, cx: int, cy: int, col: QColor) -> None:
-    """斷開狀態：兩個分離的鏈環 + 斜線斷口"""
-    pen = QPen(col, 2.0, Qt.PenStyle.SolidLine,
-               Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    # 左鏈環（向左偏移，留出斷口）
-    p.drawRoundedRect(QRectF(cx - 13, cy - 4, 11, 8), 4, 4)
-    # 右鏈環（向右偏移）
-    p.drawRoundedRect(QRectF(cx + 2, cy - 4, 11, 8), 4, 4)
-    # 斷口斜線（代表斷裂）
-    slash = QPen(col, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-    p.setPen(slash)
-    p.drawLine(cx - 1, cy + 4, cx + 1, cy - 4)
-
-
-class _SyncToggleBtn(QWidget):
-    """同步所有圖片設定的切換開關，風格與 _TopBarBtn 一致。"""
+class _SyncBtn(QWidget):
+    """同步全部切換按鈕。off=outlined，on=金色邊框+tint 背景。"""
     toggled = pyqtSignal(bool)
-
-    _H = 36
+    _H = 30
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._on      = False
-        self._hovered = False
+        self._on = self._hovered = False
+        self.setFixedSize(80, self._H)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
-        self.setFixedHeight(self._H)
-        fm = QFontMetrics(T.ui_font(T.FONT_SM))
-        w = max(fm.horizontalAdvance("同步開"),
-                fm.horizontalAdvance("同步關")) + 32 + 20
-        self.setFixedWidth(max(w, 110))
         self.setToolTip("開啟後，更改設定將同步套用至所有照片")
         _tm().theme_changed.connect(lambda _: self.update())
 
-    def is_on(self) -> bool:
-        return self._on
+    def is_on(self) -> bool: return self._on
+    def set_on(self, v: bool) -> None: self._on = v; self.update()
 
     def enterEvent(self, e) -> None:
         self._hovered = True;  self.update(); super().enterEvent(e)
-
     def leaveEvent(self, e) -> None:
         self._hovered = False; self.update(); super().leaveEvent(e)
-
     def mousePressEvent(self, e) -> None:
         if e.button() == Qt.MouseButton.LeftButton:
-            self._on = not self._on
-            self.toggled.emit(self._on)
-            self.update()
-
-    def set_on(self, v: bool) -> None:
-        self._on = v
-        self.update()
+            self._on = not self._on; self.toggled.emit(self._on); self.update()
 
     def paintEvent(self, _) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        W, H = self.width(), self.height()
-        R = T.R_CHIP
-        M = 2
-
+        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H, R, M = self.width(), self.height(), 6, 1
         if self._on:
-            p.setBrush(QBrush(QColor(T.GOLD_DIM)))
-            p.setPen(QPen(QColor(T.GOLD), 1.0))
-            icon_col = QColor(T.GOLD)
-            text_col = QColor(T.GOLD)
-            weight   = QFont.Weight.Bold
+            p.setBrush(QBrush(QColor(T.GOLD_DIM))); p.setPen(QPen(QColor(T.GOLD), 1.0))
+            text_col = QColor(T.GOLD); weight = QFont.Weight.Bold
         elif self._hovered:
-            p.setBrush(QBrush(QColor(T.GLASS_2)))
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            icon_col = QColor(T.TEXT_PRIMARY)
-            text_col = QColor(T.TEXT_PRIMARY)
-            weight   = QFont.Weight.Medium
+            p.setBrush(QBrush(QColor(T.GLASS_2))); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            text_col = QColor(T.TEXT_PRIMARY); weight = QFont.Weight.Medium
         else:
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.setPen(QPen(QColor(T.BORDER), 1.0))
-            icon_col = QColor(T.TEXT_SECONDARY)
-            text_col = QColor(T.TEXT_SECONDARY)
-            weight   = QFont.Weight.Medium
-
+            p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QPen(QColor(T.BORDER), 1.0))
+            text_col = QColor(T.TEXT_SECONDARY); weight = QFont.Weight.Medium
         p.drawRoundedRect(M, M, W - M * 2, H - M * 2, R, R)
-
         label = "同步開" if self._on else "同步關"
-
-        # 計算圖示 + 文字的整體寬度，置中對齊
-        font = T.ui_font(T.FONT_SM, weight)
-        p.setFont(font)
-        from PyQt6.QtGui import QFontMetrics
-        text_w  = QFontMetrics(font).horizontalAdvance(label)
-        icon_w  = 26   # _draw_link_* 圖示寬度約 26px
-        gap     = 6
-        total_w = icon_w + gap + text_w
-        start_x = (W - total_w) // 2
-
-        if self._on:
-            _draw_link_on(p, start_x + icon_w // 2, H // 2, icon_col)
-        else:
-            _draw_link_off(p, start_x + icon_w // 2, H // 2, icon_col)
-
-        p.setPen(QPen(text_col))
-        p.drawText(
-            QRect(start_x + icon_w + gap, 0, text_w + 2, H),
-            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-            label,
-        )
+        p.setFont(T.ui_font(T.FONT_SM, weight)); p.setPen(QPen(text_col))
+        p.drawText(QRect(0, 0, W, H), Qt.AlignmentFlag.AlignCenter, label)
         p.end()
 
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _sep() -> QFrame:
+    f = QFrame(); f.setObjectName("BarSep")
+    f.setFrameShape(QFrame.Shape.VLine); f.setFixedHeight(24)
+    return f
+
+
+# ── TopBar ─────────────────────────────────────────────────────────────────────
 
 class TopBar(QWidget):
     template_changed       = pyqtSignal(object)
     export_requested       = pyqtSignal()
     batch_export_requested = pyqtSignal()
     sync_all_toggled       = pyqtSignal(bool)
-    step_changed           = pyqtSignal(int)    # 1=調色, 2=加框
+    step_changed           = pyqtSignal(int)
 
     _TEMPLATES = [
         (TemplateStyle.CLASSIC, "經典"),
@@ -357,101 +299,78 @@ class TopBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("TopBar")
-        self.setFixedHeight(T.TITLEBAR_HEIGHT)
+        self.setFixedHeight(44)
         self._selected = TemplateStyle.CLASSIC
+        self._step = 1
         self._build()
         self._apply_style()
         _tm().theme_changed.connect(lambda _: self._apply_style())
 
     def _build(self) -> None:
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(16, 0, 16, 0)
+        lay.setContentsMargins(12, 0, 12, 0)
         lay.setSpacing(0)
 
-        # App name
-        name = QLabel("PicLab")
-        name.setObjectName("AppName")
+        # Traffic-light controls
+        self._btn_close = _WinBtn("close")
+        self._btn_min   = _WinBtn("minimize")
+        self._btn_max   = _WinBtn("maximize")
+        self._btn_close.clicked.connect(self._on_close)
+        self._btn_min.clicked.connect(self._on_minimize)
+        self._btn_max.clicked.connect(self._on_maximize)
+        lay.addWidget(self._btn_close); lay.addSpacing(8)
+        lay.addWidget(self._btn_min);   lay.addSpacing(8)
+        lay.addWidget(self._btn_max)
+
+        # Separator + app name
+        lay.addSpacing(12); lay.addWidget(_sep()); lay.addSpacing(12)
+        name = QLabel("PicLab"); name.setObjectName("AppName")
         lay.addWidget(name)
-        lay.addSpacing(14)
 
-        # 分隔線
-        sep0 = QFrame()
-        sep0.setObjectName("BarSep")
-        sep0.setFrameShape(QFrame.Shape.VLine)
-        sep0.setFixedHeight(28)
-        lay.addWidget(sep0)
-        lay.addSpacing(12)
+        # Step tabs
+        lay.addSpacing(16)
+        self._tab1 = _StepTab(1, "調色"); self._tab2 = _StepTab(2, "加框")
+        self._tab1.set_active(True)
+        self._tab1.clicked.connect(self._go_step)
+        self._tab2.clicked.connect(self._go_step)
+        lay.addWidget(self._tab1); lay.addSpacing(6)
+        arrow = QLabel("→"); arrow.setObjectName("StepArrow")
+        lay.addWidget(arrow); lay.addSpacing(6)
+        lay.addWidget(self._tab2)
 
-        # ── 步驟切換按鈕 ──
-        self._step = 1
-        self._step_btn1 = _TplBtn(1, "調色")
-        self._step_btn2 = _TplBtn(2, "加框")
-        self._step_btn1.set_active(True)
-        self._step_btn1.setFixedWidth(84)
-        self._step_btn2.setFixedWidth(84)
-        self._step_btn1.clicked.connect(lambda _: self._go_step(1))
-        self._step_btn2.clicked.connect(lambda _: self._go_step(2))
-        lay.addWidget(self._step_btn1)
-        lay.addSpacing(4)
-        _arrow = QLabel("→")
-        _arrow.setObjectName("StepArrow")
-        lay.addWidget(_arrow)
-        lay.addSpacing(4)
-        lay.addWidget(self._step_btn2)
-        lay.addSpacing(14)
-
-        # 分隔線（版型區，隨版型區塊一起顯示/隱藏）
-        self._tpl_sep = QFrame()
-        self._tpl_sep.setObjectName("BarSep")
-        self._tpl_sep.setFrameShape(QFrame.Shape.VLine)
-        self._tpl_sep.setFixedHeight(28)
-        lay.addWidget(self._tpl_sep)
-        lay.addSpacing(14)
-
-        # 版型標籤
-        self._tpl_label = QLabel("版型")
-        self._tpl_label.setObjectName("BarLabel")
-        lay.addWidget(self._tpl_label)
-        lay.addSpacing(10)
-
-        # ── 版型按鈕（QPainter chip，間距 8px）──
-        self._tpl_btns: list[_TplBtn] = []
+        # Template area (shown only in step 2)
+        self._tpl_sep   = _sep()
+        self._tpl_label = QLabel("版型"); self._tpl_label.setObjectName("BarLabel")
+        self._tpl_btns: list[_TplChip] = []
+        lay.addSpacing(10); lay.addWidget(self._tpl_sep)
+        lay.addSpacing(10); lay.addWidget(self._tpl_label); lay.addSpacing(8)
         for i, (style, label) in enumerate(self._TEMPLATES):
-            btn = _TplBtn(style, label)
+            btn = _TplChip(style, label)
             btn.clicked.connect(self._on_template_click)
             self._tpl_btns.append(btn)
             lay.addWidget(btn)
-            if i < len(self._TEMPLATES) - 1:
-                lay.addSpacing(8)
-
+            if i < len(self._TEMPLATES) - 1: lay.addSpacing(6)
         self._tpl_btns[0].set_active(True)
+        self._set_template_area_visible(False)
 
         lay.addStretch()
 
-        # 步驟 1 預設隱藏版型區
-        self._set_template_area_visible(False)
-
-        # ── 主題循環按鈕（QPainter NavBtn 風格）──
-        self._theme_btn = _TopBarBtn("外觀", _draw_theme_icon, primary=False)
+        # Right: theme / sync / export
+        self._theme_btn = _IconBtn("外觀", _draw_half_circle, width=80)
         self._theme_btn.clicked.connect(_tm().cycle_theme)
         lay.addWidget(self._theme_btn)
-        lay.addSpacing(10)
+        lay.addSpacing(8); lay.addWidget(_sep()); lay.addSpacing(8)
 
-        # ── 同步所有圖片設定開關 ──
-        self._sync_btn = _SyncToggleBtn()
+        self._sync_btn = _SyncBtn()
         self._sync_btn.toggled.connect(self.sync_all_toggled)
-        lay.addWidget(self._sync_btn)
-        lay.addSpacing(10)
+        lay.addWidget(self._sync_btn); lay.addSpacing(8)
 
-        # ── 批次匯出按鈕 ──
-        self._batch_btn = _TopBarBtn("全部匯出", _draw_export_icon, primary=False)
+        self._batch_btn = _IconBtn("全部匯出", _draw_export_icon, width=90)
         self._batch_btn.setEnabled(False)
         self._batch_btn.clicked.connect(self.batch_export_requested)
-        lay.addWidget(self._batch_btn)
-        lay.addSpacing(6)
+        lay.addWidget(self._batch_btn); lay.addSpacing(6)
 
-        # ── 匯出按鈕（QPainter NavBtn 風格，PRIMARY 配色）──
-        self._export_btn = _TopBarBtn("匯出", _draw_export_icon, primary=True)
+        self._export_btn = _IconBtn("匯出", _draw_export_icon, width=80, primary=True)
         self._export_btn.setEnabled(False)
         self._export_btn.clicked.connect(self.export_requested)
         lay.addWidget(self._export_btn)
@@ -459,30 +378,29 @@ class TopBar(QWidget):
     def _apply_style(self) -> None:
         self.setStyleSheet(f"""
             QWidget#TopBar {{
-                background: {T.SURFACE};
-                border-bottom: 1px solid {T.BORDER};
+                background: #222222;
+                border-bottom: 1px solid #3E3E3E;
             }}
             QLabel#AppName {{
                 color: {T.GOLD};
-                font-size: {T.FONT_LG}px;
-                font-weight: 800;
-                letter-spacing: 2px;
+                font-size: 15px;
+                font-weight: 700;
+                letter-spacing: 1px;
                 background: transparent;
             }}
             QFrame#BarSep {{
-                color: {T.BORDER};
-                background: {T.BORDER};
+                color: #3E3E3E;
+                background: #3E3E3E;
                 max-width: 1px;
             }}
             QLabel#BarLabel {{
                 color: {T.TEXT_SECONDARY};
                 font-size: {T.FONT_SM}px;
                 font-weight: 700;
-                letter-spacing: 0.5px;
                 background: transparent;
             }}
             QLabel#StepArrow {{
-                color: {T.TEXT_MUTED};
+                color: #7A7888;
                 font-size: {T.FONT_BASE}px;
                 background: transparent;
             }}
@@ -491,37 +409,48 @@ class TopBar(QWidget):
     def _set_template_area_visible(self, visible: bool) -> None:
         self._tpl_sep.setVisible(visible)
         self._tpl_label.setVisible(visible)
-        for btn in self._tpl_btns:
-            btn.setVisible(visible)
+        for btn in self._tpl_btns: btn.setVisible(visible)
+
+    def _on_close(self) -> None:
+        w = self.window()
+        if w: w.close()
+
+    def _on_minimize(self) -> None:
+        w = self.window()
+        if w: w.showMinimized()
+
+    def _on_maximize(self) -> None:
+        w = self.window()
+        if w: w.showNormal() if w.isMaximized() else w.showMaximized()
 
     def _go_step(self, step: int) -> None:
         self._step = step
-        self._step_btn1.set_active(step == 1)
-        self._step_btn2.set_active(step == 2)
+        self._tab1.set_active(step == 1)
+        self._tab2.set_active(step == 2)
         self._set_template_area_visible(step == 2)
         self.step_changed.emit(step)
 
-    def set_step(self, step: int) -> None:
-        """靜默更新步驟按鈕狀態（不觸發 step_changed）。"""
-        self._step = step
-        self._step_btn1.set_active(step == 1)
-        self._step_btn2.set_active(step == 2)
-        self._set_template_area_visible(step == 2)
-
     def _on_template_click(self, style: TemplateStyle) -> None:
         self._selected = style
-        for btn in self._tpl_btns:
-            btn.set_active(btn._style == style)
+        for btn in self._tpl_btns: btn.set_active(btn._style == style)
         self.template_changed.emit(style)
+
+    # ── Public API ─────────────────────────────────────────────────────────────
+
+    def set_step(self, step: int) -> None:
+        """Silent step update — does not emit step_changed."""
+        self._step = step
+        self._tab1.set_active(step == 1)
+        self._tab2.set_active(step == 2)
+        self._set_template_area_visible(step == 2)
 
     def current_template(self) -> TemplateStyle:
         return self._selected
 
     def set_template(self, style: TemplateStyle) -> None:
-        """靜默切換版型按鈕狀態（不觸發 template_changed 信號）。"""
+        """Silent template update — does not emit template_changed."""
         self._selected = style
-        for btn in self._tpl_btns:
-            btn.set_active(btn._style == style)
+        for btn in self._tpl_btns: btn.set_active(btn._style == style)
 
     def enable_export(self, enabled: bool) -> None:
         self._export_btn.setEnabled(enabled)

@@ -409,55 +409,67 @@ def _apply_split_tone(arr: F32, h_hue: int, h_sat: int,
 # 降噪 / 銳化
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _apply_noise_reduction(arr: F32, amount: int) -> F32:
+def _apply_noise_reduction(arr: F32, lum_amount: int, color_amount: int = 0,
+                           lum_detail: int = 50, color_detail: int = 50) -> F32:
     """
-    雜色消除：
-    - amount 1~40  → 快速 Bilateral filter（保留邊緣）
-    - amount 41~100 → Non-Local Means（LR 同等演算法，效果最佳）
-    分離亮度雜訊（L 通道）與色彩雜訊（a/b 通道），各自處理。
+    LR 風格雜色消除：Luminance 和 Color 通道獨立可調。
+
+    參數：
+      lum_amount    0-100 — Luminance noise 去除強度（控制 L 通道）
+      color_amount  0-100 — Color noise 去除強度（控制 a/b 通道）
+      lum_detail    0-100 — Luminance 細節保留量（高=保留更多細節，去噪較弱）
+      color_detail  0-100 — Color 細節保留量
+
+    演算法：強度 ≤40 用 Bilateral（快速、保邊緣），>40 用 Non-Local Means（高品質）。
     """
-    if amount == 0:
+    if lum_amount == 0 and color_amount == 0:
         return arr
 
     try:
         import cv2
         uint8 = (arr * 255).astype(np.uint8)
-        # 轉 Lab 分離亮度與色彩雜訊
         lab = cv2.cvtColor(uint8, cv2.COLOR_RGB2Lab)
         L, a, b = lab[:, :, 0], lab[:, :, 1], lab[:, :, 2]
 
-        lum_strength = amount / 100.0
-        col_strength = lum_strength * 0.5   # 色彩雜訊通常比亮度少
+        lum_s = lum_amount / 100.0
+        col_s = color_amount / 100.0
+        # detail 越高 → 去噪強度被削弱，保留更多紋理（與 LR 行為一致）
+        lum_keep = 0.4 + (lum_detail / 100.0) * 0.6   # 0.4 ~ 1.0
+        col_keep = 0.4 + (color_detail / 100.0) * 0.6
 
-        if amount <= 40:
-            # Bilateral：速度快，保留邊緣
-            d = max(3, int(lum_strength * 11) | 1)
-            sigma = lum_strength * 80
-            L_out = cv2.bilateralFilter(L, d, sigma, sigma)
-            cs = col_strength * 40
-            cd = max(3, int(col_strength * 7) | 1)
-            a_out = cv2.bilateralFilter(a, cd, cs, cs)
-            b_out = cv2.bilateralFilter(b, cd, cs, cs)
-        else:
-            # Non-Local Means：最佳品質，適合高 ISO
-            h_lum = 3 + lum_strength * 22   # 3~25，與雜訊強度對應
-            h_col = 2 + col_strength * 10
-            # 亮度 NLM（L 通道）
-            L_out = cv2.fastNlMeansDenoising(
-                L, None, h=h_lum, templateWindowSize=7, searchWindowSize=21)
-            # 色彩 NLM（a/b 通道，單獨處理避免跨通道干擾）
-            a_out = cv2.fastNlMeansDenoising(
-                a, None, h=h_col, templateWindowSize=7, searchWindowSize=21)
-            b_out = cv2.fastNlMeansDenoising(
-                b, None, h=h_col, templateWindowSize=7, searchWindowSize=21)
+        # ── Luminance pass ─────────────────────────────────────────────
+        L_out = L
+        if lum_amount > 0:
+            if lum_amount <= 40:
+                d = max(3, int(lum_s * 11) | 1)
+                sigma = lum_s * 80 / lum_keep
+                L_out = cv2.bilateralFilter(L, d, sigma, sigma)
+            else:
+                h_lum = (3 + lum_s * 22) / lum_keep
+                L_out = cv2.fastNlMeansDenoising(
+                    L, None, h=h_lum, templateWindowSize=7, searchWindowSize=21)
+
+        # ── Color pass (a/b channels) ──────────────────────────────────
+        a_out, b_out = a, b
+        if color_amount > 0:
+            if color_amount <= 40:
+                cd = max(3, int(col_s * 9) | 1)
+                cs = col_s * 60 / col_keep
+                a_out = cv2.bilateralFilter(a, cd, cs, cs)
+                b_out = cv2.bilateralFilter(b, cd, cs, cs)
+            else:
+                h_col = (2 + col_s * 14) / col_keep
+                a_out = cv2.fastNlMeansDenoising(
+                    a, None, h=h_col, templateWindowSize=7, searchWindowSize=21)
+                b_out = cv2.fastNlMeansDenoising(
+                    b, None, h=h_col, templateWindowSize=7, searchWindowSize=21)
 
         lab_out = cv2.merge([L_out, a_out, b_out])
         rgb_out = cv2.cvtColor(lab_out, cv2.COLOR_Lab2RGB)
         return rgb_out.astype(np.float32) / 255.0
 
     except ImportError:
-        # Fallback：cv2 不可用時用 Gaussian blur
-        radius = amount / 100.0 * 2.5
+        radius = max(lum_amount, color_amount) / 100.0 * 2.5
         img = Image.fromarray((arr * 255).astype(np.uint8), "RGB")
         return np.array(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) / 255.0
 
@@ -526,6 +538,19 @@ def apply(img: Image.Image, settings: GradeSettings) -> Image.Image:
     # ── 轉換為 float32 [0, 1] ──
     arr: F32 = np.array(img.convert("RGB"), dtype=np.float32) / 255.0
 
+    # -1. 裁切（最先執行，後續 pipeline 才在裁過的範圍上跑）
+    if (settings.crop_left or settings.crop_top
+            or settings.crop_right or settings.crop_bottom):
+        h, w = arr.shape[:2]
+        x0 = int(round(max(0.0, min(0.95, settings.crop_left)) * w))
+        y0 = int(round(max(0.0, min(0.95, settings.crop_top)) * h))
+        x1 = w - int(round(max(0.0, min(0.95, settings.crop_right)) * w))
+        y1 = h - int(round(max(0.0, min(0.95, settings.crop_bottom)) * h))
+        # Guarantee at least a 1×1 region survives.
+        x1 = max(x0 + 1, x1)
+        y1 = max(y0 + 1, y1)
+        arr = arr[y0:y1, x0:x1].copy()
+
     # 0. 幾何變換
     if settings.rotation != 0.0 or settings.flip_h or settings.flip_v:
         arr = _apply_transform(arr, settings.rotation, settings.flip_h, settings.flip_v)
@@ -583,8 +608,14 @@ def apply(img: Image.Image, settings: GradeSettings) -> Image.Image:
         )
 
     # 9. 降噪
-    if settings.noise_reduction > 0:
-        arr = _apply_noise_reduction(arr, settings.noise_reduction)
+    if settings.noise_reduction > 0 or settings.noise_color > 0:
+        arr = _apply_noise_reduction(
+            arr,
+            lum_amount=settings.noise_reduction,
+            color_amount=settings.noise_color,
+            lum_detail=settings.noise_lum_detail,
+            color_detail=settings.noise_color_detail,
+        )
 
     # 10. 銳化
     if settings.sharpening > 0:

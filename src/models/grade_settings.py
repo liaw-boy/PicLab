@@ -100,7 +100,10 @@ class GradeSettings:
 
     # ── 細節 ──────────────────────────────────────────────────────────────────
     sharpening:      int = 0    # 0-100
-    noise_reduction: int = 0    # 0-100
+    noise_reduction: int = 0    # 0-100  — LR 的 Luminance noise amount
+    noise_color:     int = 0    # 0-100  — LR 的 Color noise amount（獨立可調）
+    noise_lum_detail:   int = 50  # 0-100 — luminance 雜訊去除時保留多少細節
+    noise_color_detail: int = 50  # 0-100 — color 雜訊去除時保留多少細節
     detail_mask:     int = 20   # 銳化細節遮罩 0-100
 
     # ── LUT ───────────────────────────────────────────────────────────────────
@@ -111,6 +114,14 @@ class GradeSettings:
     rotation: float = 0.0   # 旋轉角度，-45.0 ~ +45.0 度
     flip_h:   bool  = False  # 水平翻轉
     flip_v:   bool  = False  # 垂直翻轉
+
+    # ── 裁切（Crop）──────────────────────────────────────────────────────────
+    # 4 個 0~1 的相對 inset。左上座標 = (crop_left, crop_top)；
+    # 右下 = (1-crop_right, 1-crop_bottom)。全 0 = 不裁切。
+    crop_left:   float = 0.0
+    crop_top:    float = 0.0
+    crop_right:  float = 0.0
+    crop_bottom: float = 0.0
 
     def is_identity(self) -> bool:
         """若所有值皆為預設，則不需要調色處理。"""
@@ -143,8 +154,13 @@ class GradeSettings:
             and all(v == 0 for v in self.hsl_luminance)
             and self.sharpening == 0
             and self.noise_reduction == 0
+            and self.noise_color == 0
             and self.lut_path is None
             and self.rotation == 0.0
             and not self.flip_h
             and not self.flip_v
+            and self.crop_left == 0.0
+            and self.crop_top == 0.0
+            and self.crop_right == 0.0
+            and self.crop_bottom == 0.0
         )
