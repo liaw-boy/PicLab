@@ -1094,6 +1094,138 @@
     } catch (err) { /* ignore */ }
   };
 
+  const wireAccIGPanel = () => {
+    // 頂部「發佈」按鈕 → 捲動到 accordion 並展開
+    const btnPublish = document.getElementById("btn-publish");
+    if (btnPublish) {
+      btnPublish.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const sidebar = document.querySelector(".panel-scroll");
+        const accSection = document.querySelector("section[data-acc]:last-of-type");
+        if (accSection && !accSection.classList.contains("is-open")) {
+          accSection.classList.add("is-open");
+        }
+        if (accSection && sidebar) {
+          setTimeout(() => accSection.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+        }
+        refreshAccIgStatus();
+      });
+    }
+
+    // 帳號狀態刷新
+    const refreshAccIgStatus = () => {
+      if (!bridge) return;
+      bridge.getIgStatus((raw) => {
+        try {
+          const st = JSON.parse(raw);
+          const icon = document.getElementById("acc-ig-status-icon");
+          const text = document.getElementById("acc-ig-status-text");
+          const btn  = document.getElementById("acc-ig-toggle-cfg");
+          if (st.configured) {
+            if (icon) { icon.textContent = "check_circle"; icon.style.color = "#16a34a"; }
+            if (text) { text.textContent = `已連線 · ID ${st.ig_user_id}`; text.style.color = "#16a34a"; }
+            if (btn)  btn.textContent = "修改";
+            const uid = document.getElementById("acc-ig-user-id");
+            const tok = document.getElementById("acc-ig-token");
+            const url = document.getElementById("acc-ig-upload-url");
+            if (uid && !uid.value) uid.value = st.ig_user_id;
+            if (tok && !tok.value) tok.placeholder = st.token_masked || "已設定";
+            if (url && !url.value) url.value = st.upload_url;
+          } else {
+            if (icon) { icon.textContent = "radio_button_unchecked"; icon.style.color = ""; }
+            if (text) { text.textContent = "未設定帳號"; text.style.color = ""; }
+            if (btn)  btn.textContent = "設定";
+            document.getElementById("acc-ig-cfg")?.classList.remove("hidden");
+          }
+        } catch (_) {}
+      });
+    };
+
+    // 設定面板 toggle
+    document.getElementById("acc-ig-toggle-cfg")?.addEventListener("click", () => {
+      const cfg = document.getElementById("acc-ig-cfg");
+      cfg?.classList.toggle("hidden");
+    });
+
+    // Token 顯示/隱藏
+    document.getElementById("acc-ig-token-eye")?.addEventListener("click", () => {
+      const tok = document.getElementById("acc-ig-token");
+      if (!tok) return;
+      tok.type = tok.type === "password" ? "text" : "password";
+      const icon = document.querySelector("#acc-ig-token-eye .material-symbols-outlined");
+      if (icon) icon.textContent = tok.type === "password" ? "visibility" : "visibility_off";
+    });
+
+    // 儲存
+    document.getElementById("acc-ig-save")?.addEventListener("click", () => {
+      const uid = document.getElementById("acc-ig-user-id")?.value.trim() || "";
+      const tok = document.getElementById("acc-ig-token")?.value.trim() || "";
+      const url = document.getElementById("acc-ig-upload-url")?.value.trim() || "";
+      const result = document.getElementById("acc-ig-cfg-result");
+      if (!uid || !tok || !url) {
+        if (result) { result.textContent = "請填入所有欄位"; result.style.color = "#b91c1c"; }
+        return;
+      }
+      bridge.saveIgConfig(uid, tok, url, (raw) => {
+        const res = JSON.parse(raw || "{}");
+        if (result) {
+          result.textContent = res.success ? "已儲存" : (res.error || "失敗");
+          result.style.color = res.success ? "#16a34a" : "#b91c1c";
+        }
+        if (res.success) setTimeout(() => { if (result) result.textContent = ""; refreshAccIgStatus(); document.getElementById("acc-ig-cfg")?.classList.add("hidden"); }, 1500);
+      });
+    });
+
+    // 測試連線
+    document.getElementById("acc-ig-test")?.addEventListener("click", () => {
+      const result = document.getElementById("acc-ig-cfg-result");
+      if (result) { result.textContent = "測試中…"; result.style.color = ""; }
+      bridge.testIgConnection((raw) => {
+        const res = JSON.parse(raw || "{}");
+        if (result) {
+          result.textContent = res.ok ? `✓ @${res.username}` : `✗ ${res.error}`;
+          result.style.color = res.ok ? "#16a34a" : "#b91c1c";
+        }
+      });
+    });
+
+    // Caption / hashtag 字數
+    const capEl   = document.getElementById("acc-ig-caption");
+    const capCnt  = document.getElementById("acc-ig-cap-count");
+    const hashEl  = document.getElementById("acc-ig-hashtags");
+    const hashCnt = document.getElementById("acc-ig-hash-count");
+    capEl?.addEventListener("input", () => { if (capCnt) capCnt.textContent = `${capEl.value.length}/2200`; });
+    hashEl?.addEventListener("input", () => {
+      const tags = hashEl.value.match(/#\S+/g) || [];
+      if (hashCnt) hashCnt.textContent = `${tags.length}/30`;
+    });
+
+    // 發佈
+    document.getElementById("acc-ig-publish")?.addEventListener("click", () => {
+      const caption  = (capEl?.value || "").trim();
+      const hashtags = (hashEl?.value || "").trim();
+      const location = (document.getElementById("acc-ig-location")?.value || "").trim();
+      const result   = document.getElementById("acc-ig-publish-result");
+      let finalCaption = caption;
+      if (hashtags) finalCaption += (finalCaption ? "\n\n" : "") + hashtags;
+      if (location) finalCaption += (finalCaption ? "\n\n" : "") + `📍 ${location}`;
+      if (result) { result.textContent = "發佈中…"; result.style.color = ""; result.classList.remove("hidden"); }
+      bridge.publishToIg(finalCaption, "", (resJson) => {
+        try {
+          const res = JSON.parse(resJson);
+          if (result) {
+            result.textContent = res.success ? "✓ 已發佈至 Instagram" : `✗ ${res.message || "發佈失敗"}`;
+            result.style.color = res.success ? "#16a34a" : "#b91c1c";
+          }
+        } catch (_) {
+          if (result) { result.textContent = "✗ 發佈失敗"; result.style.color = "#b91c1c"; }
+        }
+      });
+    });
+
+    refreshAccIgStatus();
+  };
+
   const wireAIDenoise = () => {
     const btn = document.getElementById("btn-ai-denoise");
     const prov = document.getElementById("ai-provider");
