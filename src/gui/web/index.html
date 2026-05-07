@@ -41,6 +41,23 @@
   .panel-scroll::-webkit-scrollbar-track { background: transparent; }
   .panel-scroll::-webkit-scrollbar-thumb { background: #D5CBB8; border-radius: 4px; }
   .panel-scroll::-webkit-scrollbar-thumb:hover { background: #B8AFA0; }
+
+  /* LR-style progress strip */
+  #progress-strip { position:absolute; top:44px; left:0; right:0; z-index:60;
+    height:0; overflow:hidden; transition:height 180ms ease;
+    background:#EDE7DC; border-bottom:1px solid #D9D0BE; }
+  #progress-strip.visible { height:26px; }
+  #progress-fill { height:100%; background:#4A1F38; border-radius:1px; width:0%;
+    transition:width 300ms ease; }
+  #progress-fill.indeterminate {
+    width:35% !important;
+    animation: prog-slide 1.4s ease-in-out infinite;
+  }
+  @keyframes prog-slide {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(200%); }
+    100% { transform: translateX(-100%); }
+  }
 </style>
 </head>
 <body>
@@ -84,6 +101,18 @@
       </div>
     </div>
   </header>
+
+  <!-- ── LR-style progress strip (slides down when busy) ──────────────────── -->
+  <div id="progress-strip">
+    <div style="display:flex;align-items:center;gap:8px;padding:0 16px;height:26px;">
+      <span id="progress-label" style="font-size:10px;letter-spacing:.06em;color:#7A7166;white-space:nowrap;min-width:0;flex-shrink:0;max-width:200px;overflow:hidden;text-overflow:ellipsis;">處理中…</span>
+      <div style="flex:1;height:2px;background:#D9D0BE;border-radius:1px;overflow:hidden;">
+        <div id="progress-fill"></div>
+      </div>
+      <span id="progress-pct" style="font-size:10px;color:#7A7166;font-variant-numeric:tabular-nums;min-width:28px;text-align:right;flex-shrink:0;"></span>
+      <button id="progress-cancel" style="display:none;padding:1px 6px;font-size:10px;color:#7A7166;background:transparent;border:1px solid #B8AFA0;border-radius:3px;cursor:pointer;flex-shrink:0;line-height:1.4;">取消</button>
+    </div>
+  </div>
 
   <!-- ── Body: photo (left, 1fr) + right rail (340px) ───────────────────────── -->
   <div class="row-start-2 grid grid-cols-[1fr_340px] overflow-hidden">

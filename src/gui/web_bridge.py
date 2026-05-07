@@ -172,6 +172,7 @@ class PyBridge(QObject):
     settingsApplied = pyqtSignal(str)  # JSON of fields to push back to UI sliders
     batchProgress = pyqtSignal(str)    # JSON {done, total, current, ok, fail}
     batchFinished = pyqtSignal(str)    # JSON {ok, fail, out_dir, errors, cancelled}
+    progressChanged = pyqtSignal(str)  # JSON {label, value(-1=indeterminate/0-100), visible, cancellable}
     thumbnailReady = pyqtSignal(str, str)  # path, data-URL (72px JPEG)
     imagesSelected = pyqtSignal(str)   # JSON array of paths after multi-select dialog
     dirSelected = pyqtSignal(str)      # directory path after folder-picker dialog
@@ -327,10 +328,12 @@ class PyBridge(QObject):
 
             if raw_reader.is_raw(p):
                 self.statusChanged.emit(f"解碼 RAW: {p.name} …")
+                self.progressChanged.emit(json.dumps({"label": f"解碼 RAW: {p.name}", "value": -1, "visible": True, "cancellable": False}))
                 self._preview_source = raw_reader.decode_preview(p).convert("RGB")
                 self._source_image = None
                 self._raw_path = p
                 w, h = self._preview_source.size
+                self.progressChanged.emit(json.dumps({"visible": False}))
                 self.statusChanged.emit(f"已載入 RAW {p.name} (預覽 {w}×{h}, 匯出時全解碼)")
             else:
                 img = Image.open(p).convert("RGB")
@@ -490,6 +493,7 @@ class PyBridge(QObject):
             if not scunet_runner.is_available():
                 return json.dumps({"ok": False, "error": "SCUNet model 不在"})
             self.statusChanged.emit("AI 神經網路去噪處理中… (SCUNet)")
+            self.progressChanged.emit(json.dumps({"label": "AI 神經網路去噪…", "value": -1, "visible": True, "cancellable": False}))
             denoised = scunet_runner.denoise(self._preview_source)
             self._preview_source = denoised
             # Also clear noise_reduction sliders since AI replaces them
@@ -497,11 +501,13 @@ class PyBridge(QObject):
                 self._settings, noise_reduction=0, noise_color=0,
             )
             provider = scunet_runner.get_provider()
+            self.progressChanged.emit(json.dumps({"visible": False}))
             self.statusChanged.emit(f"AI 去噪完成（{provider}）")
             self._schedule_render()
             return json.dumps({"ok": True, "provider": provider})
         except Exception as exc:
             log.exception("applyAIDenoise failed")
+            self.progressChanged.emit(json.dumps({"visible": False}))
             self.statusChanged.emit(f"AI 去噪失敗：{exc}")
             return json.dumps({"ok": False, "error": str(exc)})
 
@@ -859,15 +865,22 @@ class PyBridge(QObject):
                         fail += 1
                         if len(errors) < 5:
                             errors.append(msg)
+                    pct = int(done / total * 100)
+                    current_name = Path(msg).name if success else msg.split(":")[0]
                     self.batchProgress.emit(json.dumps({
                         "done": done, "total": total,
                         "ok": ok, "fail": fail,
-                        "current": Path(msg).name if success else msg.split(":")[0],
+                        "current": current_name,
+                    }, ensure_ascii=False))
+                    self.progressChanged.emit(json.dumps({
+                        "label": f"批次匯出 {done}/{total}  {current_name}",
+                        "value": pct, "visible": True, "cancellable": True,
                     }, ensure_ascii=False))
         except Exception as exc:
             log.exception("batch thread failed")
             errors.append(f"thread error: {exc}")
 
+        self.progressChanged.emit(json.dumps({"visible": False}))
         self.statusChanged.emit(
             f"批次{'已中止' if cancelled else '完成'}：{ok} 成功 / {fail} 失敗 → "
             f"{out_dir or '原檔同目錄'}"

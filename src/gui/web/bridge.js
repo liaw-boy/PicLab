@@ -206,6 +206,35 @@
     }
   };
 
+  // ── LR-style progress strip ─────────────────────────────────────────────────
+  const onProgressChanged = (json) => {
+    try {
+      const d = JSON.parse(json);
+      const strip  = document.getElementById("progress-strip");
+      const label  = document.getElementById("progress-label");
+      const fill   = document.getElementById("progress-fill");
+      const pct    = document.getElementById("progress-pct");
+      const cancel = document.getElementById("progress-cancel");
+      if (!strip) return;
+      if (d.visible === false) {
+        strip.classList.remove("visible");
+        return;
+      }
+      strip.classList.add("visible");
+      if (label) label.textContent = d.label || "處理中…";
+      if (d.value === -1) {
+        // Indeterminate — CSS animation
+        if (fill) { fill.style.width = "35%"; fill.classList.add("indeterminate"); }
+        if (pct) pct.textContent = "";
+      } else {
+        const v = Math.max(0, Math.min(100, d.value || 0));
+        if (fill) { fill.style.width = v + "%"; fill.classList.remove("indeterminate"); }
+        if (pct) pct.textContent = v + "%";
+      }
+      if (cancel) cancel.style.display = d.cancellable ? "block" : "none";
+    } catch (_e) {}
+  };
+
   const updateVitals = (img) => {
     const w = img.naturalWidth || 0;
     const h = img.naturalHeight || 0;
@@ -1623,6 +1652,10 @@
     wireHslTabs();
     wireCurves();
     wireFrame();
+    // Wire progress cancel button
+    document.getElementById("progress-cancel")?.addEventListener("click", () => {
+      if (bridge) bridge.cancelBatch();
+    });
     wireOutput();
     wireAIDenoise();
     wireAutoTone();
@@ -1649,6 +1682,7 @@
       if (bridge.dirSelected) bridge.dirSelected.connect(() => {});
       if (bridge.batchProgress) bridge.batchProgress.connect((p) => window.__batchHandlers?.onProgress(p));
       if (bridge.batchFinished) bridge.batchFinished.connect((p) => window.__batchHandlers?.onFinished(p));
+      if (bridge.progressChanged) bridge.progressChanged.connect(onProgressChanged);
       _bridgeQueue.forEach((fn) => fn());
       _bridgeQueue.length = 0;
       setStatus("就緒 — 請載入相片");
