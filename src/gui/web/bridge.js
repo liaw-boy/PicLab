@@ -6,6 +6,134 @@
   "use strict";
 
   let bridge = null;
+  const _bridgeQueue = [];
+  const onBridgeReady = (fn) => {
+    if (bridge) fn();
+    else _bridgeQueue.push(fn);
+  };
+  let _pickImagesHandler = null;
+
+  // ── Filmstrip state ───────────────────────────────────────────────────────
+  let FILM_PATHS = [];
+  let FILM_ACTIVE = 0;
+  let FILM_THUMB_SIZE = 56; // current thumb height px (user-adjustable)
+
+  const FILM_ROW_PAD = 20; // top+bottom padding inside filmstrip row
+
+  const applyFilmThumbSize = (size) => {
+    FILM_THUMB_SIZE = size;
+    const rowH = size + FILM_ROW_PAD;
+    const appGrid = document.getElementById("app-grid");
+    const strip = document.getElementById("filmstrip");
+    if (strip && !strip.classList.contains("hidden") && appGrid) {
+      appGrid.style.gridTemplateRows = `44px 1fr ${rowH}px`;
+      strip.style.height = rowH + "px";
+    }
+    // Resize all existing thumbs
+    document.querySelectorAll(".film-thumb").forEach((t) => {
+      t.style.height = size + "px";
+    });
+    document.querySelectorAll(".film-thumb img").forEach((img) => {
+      img.style.height = size + "px";
+    });
+  };
+
+  const setFilmActive = (i) => {
+    FILM_ACTIVE = i;
+    // Counter
+    const counter = document.getElementById("film-counter");
+    if (counter) counter.textContent = `${i + 1}/${FILM_PATHS.length}`;
+    // Highlight: LR uses white border ring on active thumb
+    document.querySelectorAll(".film-item").forEach((el) => {
+      const active = parseInt(el.dataset.fi, 10) === FILM_ACTIVE;
+      el.style.outline = active ? "2px solid #4A1F38" : "none";
+      el.style.outlineOffset = active ? "-2px" : "0";
+    });
+    // Scroll active into view
+    const activeEl = document.querySelector(`.film-item[data-fi="${i}"]`);
+    if (activeEl) activeEl.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  };
+
+  const buildFilmstrip = (paths) => {
+    FILM_PATHS = paths;
+    FILM_ACTIVE = 0;
+    const appGrid = document.getElementById("app-grid");
+    const strip = document.getElementById("filmstrip");
+    const inner = document.getElementById("filmstrip-inner");
+    if (!strip || !inner || !appGrid) return;
+
+    inner.innerHTML = paths.map((p, i) => {
+      const name = p.split("/").pop();
+      return `<div class="film-item flex-shrink-0 cursor-pointer"
+                   style="padding:4px 2px" data-fi="${i}" data-path="${p}" title="${name}">
+        <div class="film-thumb overflow-hidden flex items-center justify-center"
+             style="height:${FILM_THUMB_SIZE}px;width:auto;min-width:36px;max-width:96px;pointer-events:none;background:#D5CBB8;border-radius:3px;" data-fi="${i}">
+          <span class="material-symbols-outlined" style="color:#9A9088;font-size:20px;pointer-events:none">image</span>
+        </div>
+      </div>`;
+    }).join("");
+
+    // Show filmstrip — expand grid row
+    const show = paths.length > 1;
+    strip.classList.toggle("hidden", !show);
+    const rowH = FILM_THUMB_SIZE + FILM_ROW_PAD;
+    strip.style.height = rowH + "px";
+    appGrid.style.gridTemplateRows = show ? `44px 1fr ${rowH}px` : "44px 1fr";
+
+    setFilmActive(0);
+
+    // Click to load
+    inner.querySelectorAll(".film-item").forEach((el) => {
+      el.addEventListener("click", () => {
+        const i = parseInt(el.dataset.fi, 10);
+        if (i === FILM_ACTIVE) return;
+        const name = el.dataset.path.split("/").pop();
+        setStatus("載入 " + name + " …");
+        setFilmActive(i);
+        if (bridge) bridge.loadImage(el.dataset.path, (result) => {
+          if (result && result.startsWith("error")) { setStatus("載入失敗：" + result); return; }
+          setStatus("已載入 " + name);
+          bridge.getGradeParams((json) => {
+            try { updateSlidersFromParams(JSON.parse(json)); } catch (_e) {}
+          });
+        });
+      });
+    });
+
+    // Prev / Next arrows
+    const prev = document.getElementById("film-prev");
+    const next = document.getElementById("film-next");
+    if (prev) prev.onclick = () => navigateFilm(-1);
+    if (next) next.onclick = () => navigateFilm(1);
+
+    // Request thumbnails async
+    if (bridge) paths.forEach((p) => bridge.requestThumbnail(p));
+  };
+
+  const navigateFilm = (delta) => {
+    const i = Math.max(0, Math.min(FILM_PATHS.length - 1, FILM_ACTIVE + delta));
+    if (i === FILM_ACTIVE) return;
+    const name = FILM_PATHS[i].split("/").pop();
+    setStatus("載入 " + name + " …");
+    setFilmActive(i);
+    if (bridge) bridge.loadImage(FILM_PATHS[i], (result) => {
+      if (result && result.startsWith("error")) { setStatus("載入失敗：" + result); return; }
+      setStatus("已載入 " + name);
+      bridge.getGradeParams((json) => {
+        try { updateSlidersFromParams(JSON.parse(json)); } catch (_e) {}
+      });
+    });
+  };
+
+  const onThumbnailReady = (path, dataUrl) => {
+    const i = FILM_PATHS.indexOf(path);
+    if (i < 0) return;
+    const thumb = document.querySelector(`.film-thumb[data-fi="${i}"]`);
+    if (!thumb) return;
+    // Let image dictate width; height is fixed at 56px — same as LR natural-ratio thumbs
+    thumb.innerHTML = `<img src="${dataUrl}" style="height:${FILM_THUMB_SIZE}px;width:auto;display:block;pointer-events:none"/>`;
+    thumb.style.width = "auto";
+  };
 
   const fmt = (val, kind) => {
     if (kind === "ev") {
@@ -57,6 +185,17 @@
     });
   };
 
+  const updateSlidersFromParams = (params) => {
+    document.querySelectorAll("input[type=range][data-param]").forEach((input) => {
+      const key = input.dataset.param;
+      if (key in params) {
+        const scale = parseFloat(input.dataset.scale || "1");
+        input.value = scale !== 1 ? params[key] / scale : params[key];
+        updateVisual(input);
+      }
+    });
+  };
+
   const setStatus = (text) => {
     const a = document.getElementById("status-line");
     if (a) a.textContent = text;
@@ -95,38 +234,71 @@
 
   const wireButtons = () => {
     const open = document.getElementById("btn-open");
-    if (open) open.addEventListener("click", async () => {
-      if (!bridge) return;
+    if (open) open.addEventListener("click", () => {
       setStatus("選擇相片中…");
-      bridge.pickImage((path) => {
-        setStatus(path ? ("已載入 " + path.split("/").pop()) : "已取消");
+      onBridgeReady(() => {
+        _pickImagesHandler = (json) => {
+          let paths = [];
+          try { paths = JSON.parse(json); } catch (_e) { paths = []; }
+          if (!paths.length) { setStatus("請選擇相片"); return; }
+          bridge.loadImage(paths[0], (result) => {
+            if (result && result.startsWith("error")) {
+              setStatus("載入失敗：" + result);
+            } else {
+              setStatus("已載入 " + paths[0].split("/").pop());
+            }
+          });
+          buildFilmstrip(paths);
+        };
+        bridge.pickImages();
       });
     });
     const reset = document.getElementById("btn-reset");
     if (reset) reset.addEventListener("click", () => {
       if (!bridge) return;
       bridge.resetGrade();
-      document.querySelectorAll("input[type=range][data-param]").forEach((input) => {
-        // re-set to defaults stored in HTML's value attribute
-        input.value = input.defaultValue;
-        updateVisual(input);
+      bridge.getGradeParams((json) => {
+        try { updateSlidersFromParams(JSON.parse(json)); } catch (_e) {}
       });
     });
-    const exp = document.getElementById("btn-export");
-    if (exp) exp.addEventListener("click", () => {
+    // ── Export split-button ──────────────────────────────────────────────────
+    const exportMenu = document.getElementById("export-menu");
+    const exportDropBtn = document.getElementById("btn-export-dropdown");
+    // Toggle dropdown
+    exportDropBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      exportMenu?.classList.toggle("hidden");
+    });
+    // Close on outside click
+    document.addEventListener("click", () => exportMenu?.classList.add("hidden"));
+
+    const doSingleExport = () => {
       if (!bridge) return;
       const fname = document.getElementById("filename-display")?.textContent?.trim() || "untitled";
       const stem = fname.replace(/\.[^.]+$/, "") + "_graded";
-      setStatus("選擇輸出位置…");
-      bridge.pickAndExport(stem, "JPEG", 92, (savedPath) => {
+      const fmt = document.getElementById("exp-fmt")?.value || "JPEG";
+      const quality = parseInt(document.getElementById("exp-q")?.value || "92", 10);
+      setStatus("選擇匯出位置…");
+      bridge.pickAndExport(stem, fmt, quality, (savedPath) => {
         if (savedPath && !savedPath.startsWith("error")) {
-          setStatus("已輸出 " + savedPath.split("/").pop());
-        } else if (savedPath.startsWith("error")) {
-          setStatus("輸出失敗：" + savedPath);
+          setStatus("已匯出 " + savedPath.split("/").pop());
+        } else if (savedPath?.startsWith("error")) {
+          setStatus("匯出失敗：" + savedPath);
         } else {
           setStatus("已取消");
         }
       });
+    };
+
+    document.getElementById("btn-export")?.addEventListener("click", doSingleExport);
+    document.getElementById("export-single")?.addEventListener("click", () => {
+      exportMenu?.classList.add("hidden");
+      doSingleExport();
+    });
+    document.getElementById("export-batch")?.addEventListener("click", () => {
+      exportMenu?.classList.add("hidden");
+      const modal = document.getElementById("batch-modal");
+      if (modal) { modal.classList.remove("hidden"); modal.style.display = "flex"; }
     });
 
     wireZoomPan();
@@ -142,14 +314,15 @@
    */
   const wireZoomPan = () => {
     const img = document.getElementById("preview-img");
-    const fitBtn = document.getElementById("btn-fit");
-    const actualBtn = document.getElementById("btn-actual");
-    const badge = document.getElementById("zoom-badge");
+    const zoomSelect = document.getElementById("zoom-select");
     const hint = document.getElementById("zoom-hint");
     if (!img) return;
     const container = img.parentElement; // .relative wrapper with overflow-hidden
     const ZMIN = 0.1;
     const ZMAX = 12;
+
+    // Preset zoom values (must match <option value> in HTML)
+    const PRESETS = [25, 33, 50, 67, 75, 100, 150, 200, 300, 400];
 
     const state = { mode: "fit", zoom: 1, panX: 0, panY: 0 };
 
@@ -161,9 +334,28 @@
       return r.width / img.naturalWidth;
     };
 
+    const syncSelect = (pct) => {
+      if (!zoomSelect) return;
+      const pctRound = Math.round(pct);
+      // Find exact matching preset; if none, update/add a custom option
+      const existing = Array.from(zoomSelect.options).find(o => o.value === String(pctRound));
+      if (existing) {
+        zoomSelect.value = String(pctRound);
+      } else {
+        let custom = zoomSelect.querySelector("option[data-custom]");
+        if (!custom) {
+          custom = document.createElement("option");
+          custom.setAttribute("data-custom", "1");
+          zoomSelect.insertBefore(custom, zoomSelect.options[1]);
+        }
+        custom.value = String(pctRound);
+        custom.textContent = pctRound + "%";
+        zoomSelect.value = String(pctRound);
+      }
+    };
+
     const apply = () => {
       if (state.mode === "fit") {
-        // Default flow: flex parent centers; max-w/h + object-contain shrinks naturally.
         img.style.position = "";
         img.style.left = "";
         img.style.top = "";
@@ -175,10 +367,14 @@
         img.style.width = "";
         img.style.height = "";
         img.style.cursor = "";
-        if (badge) badge.classList.add("hidden");
         if (hint) hint.classList.add("hidden");
+        if (zoomSelect) zoomSelect.value = "fit";
+        // Remove stale custom option when returning to fit
+        if (zoomSelect) {
+          const custom = zoomSelect.querySelector("option[data-custom]");
+          if (custom) custom.remove();
+        }
       } else {
-        // Free zoom — absolute-position so flex doesn't squeeze, transform owns layout.
         img.style.position = "absolute";
         img.style.left = "0";
         img.style.top = "0";
@@ -190,10 +386,7 @@
         img.style.transformOrigin = "0 0";
         img.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
         img.style.cursor = state.zoom > fitScale() * 1.05 ? "grab" : "default";
-        if (badge) {
-          badge.textContent = `${Math.round(state.zoom * 100)}%`;
-          badge.classList.remove("hidden");
-        }
+        syncSelect(state.zoom * 100);
       }
     };
 
@@ -281,10 +474,7 @@
     window.addEventListener("mouseup", onMouseUp);
     container.addEventListener("dblclick", onDblClick);
 
-    if (fitBtn) fitBtn.addEventListener("click", setFit);
-    if (actualBtn) actualBtn.addEventListener("click", setActual);
-
-    // Reset to fit whenever a new image loads (so panX/panY don't leak across photos)
+    // Reset to fit whenever a new image loads
     img.addEventListener("load", () => {
       setFit();
       if (hint) {
@@ -293,11 +483,35 @@
       }
     });
 
-    // Keyboard shortcuts: F = fit, 1 = 1:1, 0 = fit (Photoshop-style)
+    // Keyboard shortcuts: F / 0 = fit, 1 = 100%
     document.addEventListener("keydown", (e) => {
-      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA")) return;
       if (e.key === "f" || e.key === "F" || e.key === "0") setFit();
       else if (e.key === "1") setActual();
+    });
+
+    // Zoom select → apply chosen level
+    if (zoomSelect) zoomSelect.addEventListener("change", () => {
+      const val = zoomSelect.value;
+      if (val === "fit") { setFit(); return; }
+      const pct = parseInt(val, 10);
+      if (!pct) return;
+      const newZoom = Math.max(ZMIN, Math.min(ZMAX, pct / 100));
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      if (state.mode === "fit") {
+        const fs = fitScale();
+        state.mode = "free";
+        state.panX = (cw - img.naturalWidth * fs) / 2;
+        state.panY = (ch - img.naturalHeight * fs) / 2;
+        state.zoom = fs;
+      }
+      const ax = cw / 2;
+      const ay = ch / 2;
+      state.panX = ax - (ax - state.panX) * (newZoom / state.zoom);
+      state.panY = ay - (ay - state.panY) * (newZoom / state.zoom);
+      state.zoom = newZoom;
+      apply();
     });
   };
 
@@ -422,13 +636,21 @@
     const path = document.getElementById("curve-path");
     const ptsLayer = document.getElementById("curve-points");
     const pts = CURVES[CURVE_TAB];
-    // Build smooth path through points (256x256 viewBox)
-    let d = "";
-    pts.forEach((p, i) => {
-      const x = p[0] * 256;
-      const y = (1 - p[1]) * 256;
-      d += (i === 0 ? "M " : " L ") + x.toFixed(1) + " " + y.toFixed(1);
-    });
+    // Catmull-Rom → cubic bezier smooth path (256×256 viewBox)
+    const sx = (v) => (v * 256).toFixed(1);
+    const sy = (v) => ((1 - v) * 256).toFixed(1);
+    let d = `M ${sx(pts[0][0])},${sy(pts[0][1])}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const cp1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const cp1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const cp2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const cp2y = p2[1] - (p3[1] - p1[1]) / 6;
+      d += ` C ${sx(cp1x)},${sy(cp1y)} ${sx(cp2x)},${sy(cp2y)} ${sx(p2[0])},${sy(p2[1])}`;
+    }
     path.setAttribute("d", d);
     path.setAttribute("stroke", CURVE_COLOR[CURVE_TAB]);
     ptsLayer.innerHTML = pts.map((p, i) =>
@@ -465,11 +687,15 @@
       if (dragIdx < 0) return;
       const [x, y] = toCoords(ev);
       const arr = CURVES[CURVE_TAB];
-      // Endpoints can move only vertically
-      if (dragIdx === 0) arr[0] = [0, y];
-      else if (dragIdx === arr.length - 1) arr[arr.length - 1] = [1, y];
-      else arr[dragIdx] = [x, y];
+      // Build new point; endpoints are locked to x=0/1
+      const newPt =
+        dragIdx === 0 ? [0, y] :
+        dragIdx === arr.length - 1 ? [1, y] :
+        [x, y];
+      arr[dragIdx] = newPt;
       arr.sort((a, b) => a[0] - b[0]);
+      // Re-anchor dragIdx to the moved point by reference
+      dragIdx = arr.indexOf(newPt);
       renderCurve();
     });
     document.addEventListener("mouseup", () => { dragIdx = -1; });
@@ -534,24 +760,7 @@
     if (le && lelabel) le.addEventListener("input", () => {
       lelabel.textContent = le.value === "0" ? "Original" : le.value + "px";
     });
-
-    // Override Export button: now uses Output options
-    const exp = document.getElementById("btn-export");
-    if (exp) {
-      const newExp = exp.cloneNode(true);
-      exp.parentNode.replaceChild(newExp, exp);
-      newExp.addEventListener("click", () => {
-        if (!bridge) return;
-        const fmt = document.getElementById("exp-fmt")?.value || "JPEG";
-        const quality = parseInt(document.getElementById("exp-q")?.value || "92", 10);
-        const longEdge = parseInt(document.getElementById("exp-le")?.value || "0", 10);
-        setStatus("選擇輸出位置…");
-        bridge.pickAndExportWithOptions(fmt, quality, longEdge, (saved) => {
-          setStatus(saved && !saved.startsWith("error") ? "已輸出 " + saved.split("/").pop()
-                  : (saved?.startsWith("error") ? "輸出失敗：" + saved : "已取消"));
-        });
-      });
-    }
+    // btn-export click is already wired in wireButtons (doSingleExport reads fmt/quality from form)
 
     wireBatchWizard();
 
@@ -586,12 +795,14 @@
     const cap = document.getElementById("ig-caption");
     const hash = document.getElementById("ig-hashtags");
     const loc = document.getElementById("ig-location");
+    const altText = document.getElementById("ig-alt-text");
     const addExif = document.getElementById("ig-add-exif");
     const hashNl = document.getElementById("ig-hash-newline");
     const watermark = document.getElementById("ig-add-watermark");
     const capCount = document.getElementById("ig-caption-count");
     const hashCount = document.getElementById("ig-hash-count");
     const preview = document.getElementById("ig-preview");
+    const ratioWarn = document.getElementById("ig-ratio-warn");
 
     /** @returns {string} the EXIF-derived line, or empty if no data / toggle off */
     const exifLine = () => {
@@ -638,7 +849,7 @@
       }
     };
 
-    [cap, hash, loc, addExif, hashNl, watermark].forEach((el) => {
+    [cap, hash, loc, altText, addExif, hashNl, watermark].forEach((el) => {
       el?.addEventListener("input", updatePreview);
       el?.addEventListener("change", updatePreview);
     });
@@ -654,6 +865,70 @@
       });
     });
 
+    // ── Hashtag presets (localStorage) ──────────────────────────────────────
+    const HASH_PRESET_KEY = "piclab_ig_hash_presets";
+    const loadHashPresets = () => {
+      try { return JSON.parse(localStorage.getItem(HASH_PRESET_KEY) || "[]"); } catch { return []; }
+    };
+    const saveHashPresets = (arr) => localStorage.setItem(HASH_PRESET_KEY, JSON.stringify(arr));
+
+    const renderHashPresets = () => {
+      const container = document.getElementById("ig-hash-presets");
+      if (!container) return;
+      const presets = loadHashPresets();
+      if (!presets.length) { container.innerHTML = '<span class="text-[10px] text-muted">尚無預設組合</span>'; return; }
+      container.innerHTML = presets.map((p, i) =>
+        `<div class="flex items-center gap-0.5">
+          <button class="hash-preset-load text-[10px] px-2 py-0.5 rounded-full border border-line hover:bg-ink hover:text-bg" data-idx="${i}">${p.name}</button>
+          <button class="hash-preset-del text-[10px] px-1 text-muted hover:text-accent" data-idx="${i}" title="刪除">×</button>
+        </div>`
+      ).join("");
+      container.querySelectorAll(".hash-preset-load").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const p = loadHashPresets()[parseInt(btn.dataset.idx, 10)];
+          if (p && hash) { hash.value = p.tags; updatePreview(); }
+        });
+      });
+      container.querySelectorAll(".hash-preset-del").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const arr = loadHashPresets();
+          arr.splice(parseInt(btn.dataset.idx, 10), 1);
+          saveHashPresets(arr);
+          renderHashPresets();
+        });
+      });
+    };
+
+    document.getElementById("ig-hash-save")?.addEventListener("click", () => {
+      const tags = hash?.value?.trim();
+      if (!tags) return;
+      const name = prompt("預設組合名稱：");
+      if (!name) return;
+      const arr = loadHashPresets();
+      arr.push({ name, tags });
+      saveHashPresets(arr);
+      renderHashPresets();
+    });
+
+    renderHashPresets();
+
+    // ── Aspect ratio check on modal open ────────────────────────────────────
+    const checkAspectRatio = () => {
+      const img = document.getElementById("preview-img");
+      if (!ratioWarn || !img || img.classList.contains("hidden")) return;
+      const w = img.naturalWidth, h = img.naturalHeight;
+      if (!w || !h) return;
+      const ratio = w / h;
+      // IG best: 4:5 (0.8) ± 5% or 1:1 (1.0) ± 5%
+      const ok45 = Math.abs(ratio - 0.8) < 0.05;
+      const ok11 = Math.abs(ratio - 1.0) < 0.05;
+      ratioWarn.classList.toggle("hidden", ok45 || ok11);
+    };
+
+    const origOpen = open;
+    // Patch open to also run ratio check
+    if (pub) pub.addEventListener("click", checkAspectRatio);
+
     document.getElementById("ig-confirm")?.addEventListener("click", () => {
       if (!bridge) return;
       const finalCaption = buildFinal();
@@ -661,9 +936,10 @@
         setStatus("IG caption 超過 2200 字");
         return;
       }
+      const altVal = altText?.value?.trim() || "";
       close();
       setStatus("發佈到 IG …");
-      bridge.publishToIg(finalCaption, (resJson) => {
+      bridge.publishToIg(finalCaption, altVal, (resJson) => {
         try {
           const r = JSON.parse(resJson);
           setStatus(r.success ? "✓ IG 發佈成功" : "IG 失敗：" + (r.message || ""));
@@ -924,8 +1200,7 @@
    */
   const wireBatchWizard = () => {
     const modal = document.getElementById("batch-modal");
-    const trigger = document.getElementById("btn-batch");
-    if (!modal || !trigger) return;
+    if (!modal) return;
 
     const open = () => { modal.classList.remove("hidden"); modal.style.display = "flex"; };
     const close = () => { modal.classList.add("hidden"); modal.style.display = ""; };
@@ -938,6 +1213,7 @@
     const filesInfo = document.getElementById("batch-files-info");
     const dirInfo = document.getElementById("batch-dir-info");
     const fmtEcho = document.getElementById("batch-fmt-echo");
+    const trigger = document.getElementById("export-batch");
 
     const refreshFmtEcho = () => {
       const fmt = document.getElementById("exp-fmt")?.value || "JPEG";
@@ -947,7 +1223,7 @@
       if (fmtEcho) fmtEcho.textContent = `${fmt} · Q${q} · 長邊 ${leText}`;
     };
 
-    trigger.addEventListener("click", () => {
+    trigger?.addEventListener("click", () => {
       pickedFiles = [];
       pickedDir = "";
       if (filesInfo) filesInfo.textContent = "（尚未選擇）";
@@ -958,21 +1234,33 @@
     document.getElementById("batch-close")?.addEventListener("click", () => { if (!running) close(); });
     document.getElementById("batch-cancel")?.addEventListener("click", () => { if (!running) close(); });
 
+    let _batchPickingFiles = false;
+    let _batchPickingDir = false;
     document.getElementById("batch-pick-files")?.addEventListener("click", () => {
-      if (!bridge) return;
-      bridge.pickFiles((json) => {
+      if (!bridge || _batchPickingFiles) return;
+      _batchPickingFiles = true;
+      const h = (json) => {
+        bridge.imagesSelected.disconnect(h);
+        _batchPickingFiles = false;
         try { pickedFiles = JSON.parse(json || "[]"); } catch (_e) { pickedFiles = []; }
         if (filesInfo) filesInfo.textContent = pickedFiles.length
           ? `${pickedFiles.length} 張已選`
           : "（尚未選擇）";
-      });
+      };
+      bridge.imagesSelected.connect(h);
+      bridge.pickFiles();
     });
     document.getElementById("batch-pick-dir")?.addEventListener("click", () => {
-      if (!bridge) return;
-      bridge.pickOutputDir((dir) => {
+      if (!bridge || _batchPickingDir) return;
+      _batchPickingDir = true;
+      const h = (dir) => {
+        bridge.dirSelected.disconnect(h);
+        _batchPickingDir = false;
         pickedDir = dir || "";
         if (dirInfo) dirInfo.textContent = pickedDir || "（取消＝原檔同目錄）";
-      });
+      };
+      bridge.dirSelected.connect(h);
+      bridge.pickOutputDir();
     });
 
     document.getElementById("batch-groups-all")?.addEventListener("click", () => {
@@ -1305,6 +1593,9 @@
         const fields = ["exposure", "contrast", "highlights", "shadows", "whites", "blacks", "clarity", "dehaze"];
         const zeros = Object.fromEntries(fields.map((f) => [f, 0]));
         syncSlidersFromDeltas(zeros);
+        // Reset HSL state and re-render current tab
+        ["hue", "saturation", "luminance"].forEach((k) => HSL_STATE[k].fill(0));
+        renderHslTab();
         // Push each zero to backend
         if (bridge) {
           fields.forEach((f) => bridge.setGradeParam(f, 0));
@@ -1343,13 +1634,23 @@
     }
     new QWebChannel(qt.webChannelTransport, (channel) => {
       bridge = channel.objects.bridge;
+      if (!bridge) { setStatus("⚠ 橋接物件不存在，請重啟應用"); return; }
       bridge.previewReady.connect(onPreviewReady);
       bridge.statusChanged.connect(setStatus);
       bridge.exifReady.connect(onExifReady);
       bridge.histogramReady.connect(onHistogramReady);
       bridge.settingsApplied.connect(onSettingsApplied);
+      bridge.thumbnailReady.connect(onThumbnailReady);
+      bridge.imagesSelected.connect((json) => {
+        const cb = _pickImagesHandler;
+        _pickImagesHandler = null;
+        if (cb) cb(json);
+      });
+      if (bridge.dirSelected) bridge.dirSelected.connect(() => {});
       if (bridge.batchProgress) bridge.batchProgress.connect((p) => window.__batchHandlers?.onProgress(p));
       if (bridge.batchFinished) bridge.batchFinished.connect((p) => window.__batchHandlers?.onFinished(p));
+      _bridgeQueue.forEach((fn) => fn());
+      _bridgeQueue.length = 0;
       setStatus("就緒 — 請載入相片");
     });
   };

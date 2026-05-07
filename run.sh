@@ -49,5 +49,6 @@ if [ -d "$NV" ]; then
   export LD_LIBRARY_PATH
 fi
 
-echo "🎬 Launching $FILE ..."
-exec .venv/bin/python "$FILE"
+LOG="$HOME/.piclab.log"
+echo "🎬 Launching $FILE  (log → $LOG)"
+exec .venv/bin/python "$FILE" 2>&1 | tee "$LOG"

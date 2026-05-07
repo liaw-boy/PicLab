@@ -65,14 +65,18 @@ class IGPublisher:
                 pass
             self._uploaded_filename = ""
 
-    def _create_container(self, image_url: str, caption: str) -> str:
+    def _create_container(self, image_url: str, caption: str,
+                          alt_text: str = "") -> str:
+        params: dict = {
+            "image_url": image_url,
+            "caption": caption,
+            "access_token": self.page_token,
+        }
+        if alt_text:
+            params["accessibility_caption"] = alt_text
         resp = requests.post(
             f"{self.API_BASE}/{self.ig_user_id}/media",
-            params={
-                "image_url": image_url,
-                "caption": caption,
-                "access_token": self.page_token,
-            },
+            params=params,
             timeout=30,
         )
         data = resp.json()
@@ -110,10 +114,11 @@ class IGPublisher:
             raise RuntimeError(data["error"].get("message", "Unknown error"))
         return data["id"]
 
-    def publish(self, image_path: str, caption: str) -> PublishResult:
+    def publish(self, image_path: str, caption: str,
+                alt_text: str = "") -> PublishResult:
         try:
             image_url = self.upload_image(image_path)
-            container_id = self._create_container(image_url, caption)
+            container_id = self._create_container(image_url, caption, alt_text)
             self._wait_container_ready(container_id)
             post_id = self._publish_container(container_id)
             self._delete_uploaded()

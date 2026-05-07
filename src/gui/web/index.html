@@ -45,7 +45,7 @@
 </head>
 <body>
 
-<div class="w-screen h-screen grid grid-rows-[44px_1fr] overflow-hidden">
+<div id="app-grid" class="w-screen h-screen grid grid-rows-[44px_1fr] overflow-hidden">
 
   <!-- ── Top bar (44px, LR-thin) ────────────────────────────────────────────── -->
   <header class="row-start-1 flex items-center justify-between px-5 border-b border-line bg-bg/95 backdrop-blur-sm">
@@ -55,22 +55,33 @@
       <span class="text-[11px] tracking-widest uppercase text-muted ml-4" id="filename-display">untitled</span>
     </div>
     <div class="flex items-center gap-1">
-      <button id="btn-open"   class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors">
+      <button id="btn-open" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors">
         <span class="material-symbols-outlined text-[16px]">folder_open</span>開啟
       </button>
-      <button id="btn-reset"  class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors">
+      <button id="btn-reset" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors">
         <span class="material-symbols-outlined text-[16px]">restart_alt</span>重設
       </button>
       <span class="w-px h-5 bg-line mx-1" aria-hidden="true"></span>
-      <button id="btn-batch" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors" title="批次處理（多張）">
-        <span class="material-symbols-outlined text-[16px]">stacks</span>批次
-      </button>
       <button id="btn-publish" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors" title="發佈至 Instagram">
         <span class="material-symbols-outlined text-[16px]">share</span>發佈
       </button>
-      <button id="btn-export" class="ml-1 px-4 py-1.5 text-xs flex items-center gap-1.5 rounded-md bg-accent text-bg hover:bg-ink transition-colors">
-        <span class="material-symbols-outlined text-[16px]">arrow_outward</span>輸出
-      </button>
+      <!-- Export split-button: left = single export, right = dropdown -->
+      <div class="relative ml-1 flex" id="export-btn-group">
+        <button id="btn-export" class="px-4 py-1.5 text-xs flex items-center gap-1.5 rounded-l-md bg-accent text-bg hover:bg-ink transition-colors">
+          <span class="material-symbols-outlined text-[16px]">arrow_outward</span>匯出
+        </button>
+        <button id="btn-export-dropdown" class="px-1.5 py-1.5 text-xs flex items-center rounded-r-md bg-accent text-bg hover:bg-ink transition-colors border-l border-white/20">
+          <span class="material-symbols-outlined text-[14px]">expand_more</span>
+        </button>
+        <div id="export-menu" class="hidden absolute right-0 top-full mt-1 bg-surface border border-line rounded-lg shadow-lg z-40 overflow-hidden" style="white-space:nowrap;min-width:max-content">
+          <button id="export-single" class="w-full px-4 py-2.5 text-xs text-left flex items-center gap-2 hover:bg-ink hover:text-bg transition-colors">
+            <span class="material-symbols-outlined text-[14px]">image</span>單張匯出
+          </button>
+          <button id="export-batch" class="w-full px-4 py-2.5 text-xs text-left flex items-center gap-2 hover:bg-ink hover:text-bg transition-colors">
+            <span class="material-symbols-outlined text-[14px]">stacks</span>批次匯出
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -135,21 +146,36 @@
       <div class="absolute top-5 left-5 bg-surface/95 backdrop-blur-sm border border-line rounded-full px-4 py-1.5 text-[11px] font-mono tnum tracking-wider uppercase text-ink/80 hidden" id="exif-strip">
         <span id="exif-text">ISO 200 · f/4 · 1/250s · 85mm</span>
       </div>
-      <!-- Floating zoom + status -->
-      <div class="absolute bottom-5 left-5 flex items-center gap-3">
-        <button id="btn-fit" class="px-3 py-1 bg-surface/95 backdrop-blur-sm border border-line rounded-full text-[11px] hover:bg-ink hover:text-bg transition-colors flex items-center gap-1" title="適合畫面（F 鍵）">
-          <span class="material-symbols-outlined text-[14px]">fit_screen</span>適合
-        </button>
-        <button id="btn-actual" class="px-3 py-1 bg-surface/95 backdrop-blur-sm border border-line rounded-full text-[11px] hover:bg-ink hover:text-bg transition-colors flex items-center gap-1" title="實際像素 100%（1 鍵）">
-          <span class="material-symbols-outlined text-[14px]">crop_free</span>1:1
-        </button>
-        <span class="text-[11px] tnum font-mono bg-surface/95 backdrop-blur-sm border border-line rounded-full px-2.5 py-0.5 text-ink/80 hidden" id="zoom-badge">100%</span>
+      <!-- Floating zoom select + status -->
+      <div class="absolute bottom-5 left-5 flex items-center gap-2">
+        <!-- LR-style zoom dropdown -->
+        <div class="bg-surface/95 backdrop-blur-sm border border-line rounded-full px-1 py-0.5 flex items-center">
+          <span class="material-symbols-outlined text-[13px] text-muted px-1.5">zoom_in</span>
+          <select id="zoom-select"
+            style="appearance:none;-webkit-appearance:none;background:transparent;border:none;outline:none;font-size:11px;font-family:monospace;color:inherit;cursor:pointer;padding:1px 16px 1px 2px;min-width:56px;"
+            title="縮放比例（F 鍵 = 適合）">
+            <option value="fit">適合</option>
+            <option value="25">25%</option>
+            <option value="33">33%</option>
+            <option value="50">50%</option>
+            <option value="67">67%</option>
+            <option value="75">75%</option>
+            <option value="100">100%</option>
+            <option value="150">150%</option>
+            <option value="200">200%</option>
+            <option value="300">300%</option>
+            <option value="400">400%</option>
+          </select>
+          <!-- custom arrow -->
+          <span class="material-symbols-outlined text-[11px] text-muted -ml-3 pointer-events-none">expand_more</span>
+        </div>
         <span class="text-[11px] text-ink/70 font-mono" id="status-line">等待載入相片</span>
       </div>
       <!-- Zoom hint (first-time) -->
       <div class="absolute top-5 right-5 bg-surface/95 backdrop-blur-sm border border-line rounded-full px-3 py-1 text-[10px] tracking-widest text-muted hidden" id="zoom-hint">
         <span class="material-symbols-outlined text-[12px] align-middle">drag_pan</span> 滾輪：縮放　拖曳：平移　雙擊：適合 / 100%
       </div>
+
     </main>
 
     <!-- Right rail: histogram + accordion sliders -->
@@ -197,32 +223,7 @@
               <button data-preset="REALA-ACE.cube" class="preset-btn px-2 py-2 text-[10px] uppercase tracking-wider rounded border border-line hover:bg-ink hover:text-bg transition-colors">Reala ACE</button>
             </div>
             <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">不透明度 <span class="opacity-60">Opacity</span></label><span class="font-mono tnum text-xs text-ink">100</span></div><input class="pen-slider" data-param="lut_opacity" data-scale="1" max="100" min="0" type="range" value="100"/></div>
-            <!-- Treatment toggle -->
-            <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
-              <span class="text-[10px] tracking-widest text-muted">處理 · Treatment</span>
-              <div class="flex gap-1">
-                <button id="btn-treat-color" class="treat-btn px-3 py-1 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg" data-treatment="color">彩色</button>
-                <button id="btn-treat-bw" class="treat-btn px-3 py-1 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg" data-treatment="bw">黑白</button>
-              </div>
-            </div>
-            <!-- Flip / Rotate -->
-            <div class="mt-3 pt-3 border-t border-line flex items-center justify-between">
-              <span class="text-[10px] tracking-widest text-muted">變形 · Transform</span>
-              <div class="flex gap-1">
-                <button id="btn-flip-h" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Flip horizontal">
-                  <span class="material-symbols-outlined text-[16px]">flip</span>
-                </button>
-                <button id="btn-flip-v" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Flip vertical">
-                  <span class="material-symbols-outlined text-[16px] rotate-90 inline-block">flip</span>
-                </button>
-                <button id="btn-rot-l" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Rotate -90°">
-                  <span class="material-symbols-outlined text-[16px]">rotate_left</span>
-                </button>
-                <button id="btn-rot-r" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="Rotate +90°">
-                  <span class="material-symbols-outlined text-[16px]">rotate_right</span>
-                </button>
-              </div>
-            </div>
+
           </div>
         </section>
 
@@ -237,6 +238,14 @@
             <span class="text-[10px] tracking-widest uppercase text-muted">01</span>
           </header>
           <div class="acc-body space-y-2.5">
+            <!-- Treatment toggle -->
+            <div class="flex items-center justify-between mb-2 pb-2 border-b border-line">
+              <span class="text-[10px] tracking-widest text-muted">處理 · Treatment</span>
+              <div class="flex gap-1">
+                <button id="btn-treat-color" class="treat-btn px-3 py-1 text-[10px] tracking-wider rounded border border-accent bg-accent text-bg" data-treatment="color">彩色</button>
+                <button id="btn-treat-bw" class="treat-btn px-3 py-1 text-[10px] tracking-wider rounded border border-line text-ink hover:bg-ink hover:text-bg" data-treatment="bw">黑白</button>
+              </div>
+            </div>
             <div class="flex items-center gap-2 mb-2">
               <button id="btn-auto-tone" class="flex-1 px-3 py-1.5 bg-accent text-bg text-[11px] tracking-widest rounded hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5">
                 <span class="material-symbols-outlined text-[14px]">auto_fix_high</span>自動色調
@@ -397,10 +406,10 @@
           </div>
         </section>
 
-        <!-- Geometry -->
+        <!-- Transform -->
         <section class="acc" data-acc>
           <header class="acc-head">
-            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">幾何 <span class="text-muted text-xs font-normal">· Geometry</span></span></div>
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">裁切 <span class="text-muted text-xs font-normal">· Crop</span></span></div>
             <span class="text-[10px] tracking-widest uppercase text-muted">05</span>
           </header>
           <div class="acc-body space-y-2.5">
@@ -411,6 +420,24 @@
               <button id="btn-reset-crop" class="px-3 py-1.5 border border-line text-[11px] tracking-widest rounded hover:bg-ink hover:text-bg transition-colors" title="清除裁切">清除</button>
             </div>
             <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">旋轉 <span class="opacity-60">Rotation</span></label><span class="font-mono tnum text-xs text-ink">+0.0°</span></div><input class="pen-slider" data-param="rotation" data-scale="1" max="45" min="-45" step="0.5" type="range" value="0"/></div>
+            <!-- Flip & 90° rotate — moved from Presets section -->
+            <div class="pt-2 border-t border-line flex items-center justify-between">
+              <span class="text-[10px] tracking-widest text-muted">翻轉 · Flip</span>
+              <div class="flex gap-1">
+                <button id="btn-flip-h" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="水平翻轉">
+                  <span class="material-symbols-outlined text-[16px]">flip</span>
+                </button>
+                <button id="btn-flip-v" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="垂直翻轉">
+                  <span class="material-symbols-outlined text-[16px] rotate-90 inline-block">flip</span>
+                </button>
+                <button id="btn-rot-l" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="逆時針 90°">
+                  <span class="material-symbols-outlined text-[16px]">rotate_left</span>
+                </button>
+                <button id="btn-rot-r" class="px-2 py-1.5 rounded border border-line hover:bg-ink hover:text-bg transition-colors" title="順時針 90°">
+                  <span class="material-symbols-outlined text-[16px]">rotate_right</span>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -477,7 +504,7 @@
         <!-- Output / Export options + actions -->
         <section class="acc" data-acc>
           <header class="acc-head">
-            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">輸出 <span class="text-muted text-xs font-normal">· Output</span></span></div>
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">匯出 <span class="text-muted text-xs font-normal">· Output</span></span></div>
             <span class="text-[10px] tracking-widest uppercase text-muted">07</span>
           </header>
           <div class="acc-body space-y-3">
@@ -489,12 +516,26 @@
             </div>
             <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">品質 <span class="opacity-60">Quality</span></label><span class="font-mono tnum text-xs text-ink" id="exp-q-label">92</span></div><input id="exp-q" class="pen-slider" max="100" min="50" type="range" value="92"/></div>
             <div class="slr"><div class="flex items-baseline justify-between"><label class="text-[11px] tracking-wider text-muted">長邊 <span class="opacity-60">Long Edge</span></label><span class="font-mono tnum text-xs text-ink" id="exp-le-label">原始</span></div><input id="exp-le" class="pen-slider" max="6000" min="0" step="100" type="range" value="0"/></div>
-            <p class="text-[10px] text-muted leading-relaxed pt-2 border-t border-line">這裡是輸出設定。<br>頂部工具列：<span class="text-ink">輸出</span>（單張）／<span class="text-ink">批次</span>（多張）／<span class="text-ink">發佈</span>（IG）共用此設定。</p>
+            <p class="text-[10px] text-muted leading-relaxed pt-2 border-t border-line">這裡是匯出設定。<br>頂部工具列：<span class="text-ink">匯出</span>（單張）／<span class="text-ink">批次</span>（多張）／<span class="text-ink">發佈</span>（IG）共用此設定。</p>
           </div>
         </section>
 
       </div>
     </aside>
+  </div>
+
+  <!-- ── Filmstrip: row-start-3 col-span-2, LR-style full width ──────────── -->
+  <div id="filmstrip" class="hidden row-start-3 col-span-2 flex items-stretch select-none"
+       style="background:#E8E0D0;border-top:1px solid #D5CBB8;">
+    <button id="film-prev" class="flex-shrink-0 w-9 flex items-center justify-center text-muted hover:text-ink transition-colors">
+      <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+    </button>
+    <div id="film-counter" class="flex-shrink-0 flex items-center px-2 text-[10px] font-mono text-muted tracking-wider w-12 justify-center"></div>
+    <div id="filmstrip-inner" class="flex-1 flex items-center gap-1 px-1 overflow-x-auto"
+         style="scrollbar-width:thin;scrollbar-color:#B8AFA0 transparent;"></div>
+    <button id="film-next" class="flex-shrink-0 w-9 flex items-center justify-center text-muted hover:text-ink transition-colors">
+      <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+    </button>
   </div>
 </div>
 
@@ -522,7 +563,7 @@
 
     <!-- Step 2: out dir -->
     <div class="space-y-1">
-      <label class="text-[11px] tracking-wider text-muted">② 輸出資料夾</label>
+      <label class="text-[11px] tracking-wider text-muted">② 匯出資料夾</label>
       <div class="flex items-center gap-2">
         <button id="batch-pick-dir" class="px-3 py-1.5 text-xs tracking-wider rounded border border-line hover:bg-ink hover:text-bg flex items-center gap-1.5">
           <span class="material-symbols-outlined text-[14px]">drive_folder_upload</span>選擇資料夾
@@ -560,7 +601,7 @@
         <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="hsl" checked/>HSL</label>
         <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="curves" checked/>曲線</label>
         <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="lut" checked/>LUT</label>
-        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="geometry" checked/>幾何</label>
+        <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="geometry" checked/>裁切</label>
         <label class="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" class="accent-accent" data-group="crop" checked/>裁切</label>
       </div>
       <div class="flex gap-2 mt-1">
@@ -577,7 +618,7 @@
 
     <!-- Output settings inherited from accordion -->
     <div class="text-[10px] text-muted bg-bg border border-line rounded p-2 leading-relaxed">
-      格式 / 品質 / 長邊 沿用「輸出」section 設定（目前：<span id="batch-fmt-echo" class="font-mono text-ink/80">JPEG · Q92</span>）
+      格式 / 品質 / 長邊 沿用「匯出」section 設定（目前：<span id="batch-fmt-echo" class="font-mono text-ink/80">JPEG · Q92</span>）
     </div>
 
     <!-- Progress (shown during run) -->
@@ -642,8 +683,31 @@
 
     <!-- Location -->
     <div>
-      <label class="text-[11px] tracking-wider text-muted mb-1 block">地點 · Location <span class="opacity-60">（可選）</span></label>
+      <label class="text-[11px] tracking-wider text-muted mb-1 block">地點 · Location <span class="opacity-60">（可選，附加至 caption 📍）</span></label>
       <input id="ig-location" type="text" class="w-full px-3 py-2 text-sm border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent" placeholder="例：Taipei, Taiwan"/>
+    </div>
+
+    <!-- Alt text -->
+    <div>
+      <label class="text-[11px] tracking-wider text-muted mb-1 block">無障礙說明 · Alt Text <span class="opacity-60">（accessibility_caption，可選）</span></label>
+      <input id="ig-alt-text" type="text" maxlength="420" class="w-full px-3 py-2 text-sm border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent" placeholder="描述照片內容，供視覺障礙讀者使用"/>
+    </div>
+
+    <!-- Hashtag presets -->
+    <div class="pt-1 border-t border-line">
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="text-[11px] tracking-wider text-muted">標籤預設組合</label>
+        <button id="ig-hash-save" class="text-[10px] px-2 py-0.5 rounded border border-line hover:bg-ink hover:text-bg tracking-wider">儲存目前</button>
+      </div>
+      <div id="ig-hash-presets" class="flex flex-wrap gap-1">
+        <!-- injected by JS from localStorage -->
+      </div>
+    </div>
+
+    <!-- Aspect ratio warning -->
+    <div id="ig-ratio-warn" class="hidden px-3 py-2 rounded border text-[11px]" style="background:#fffbeb;border-color:#fcd34d;color:#92400e;">
+      <span class="material-symbols-outlined text-[13px] align-middle">warning</span>
+      目前比例非 IG 最佳（4:5 / 1:1），建議裁切後再發佈。
     </div>
 
     <!-- Toggles -->

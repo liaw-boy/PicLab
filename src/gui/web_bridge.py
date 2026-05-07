@@ -172,6 +172,26 @@ class PyBridge(QObject):
     settingsApplied = pyqtSignal(str)  # JSON of fields to push back to UI sliders
     batchProgress = pyqtSignal(str)    # JSON {done, total, current, ok, fail}
     batchFinished = pyqtSignal(str)    # JSON {ok, fail, out_dir, errors, cancelled}
+    thumbnailReady = pyqtSignal(str, str)  # path, data-URL (72px JPEG)
+    imagesSelected = pyqtSignal(str)   # JSON array of paths after multi-select dialog
+    dirSelected = pyqtSignal(str)      # directory path after folder-picker dialog
+
+    _PREFS_FILE: Path = Path.home() / ".config" / "piclab" / "prefs.json"
+
+    @classmethod
+    def _load_prefs(cls) -> dict:
+        try:
+            return json.loads(cls._PREFS_FILE.read_text())
+        except Exception:
+            return {}
+
+    @classmethod
+    def _save_prefs(cls, prefs: dict) -> None:
+        try:
+            cls._PREFS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            cls._PREFS_FILE.write_text(json.dumps(prefs, indent=2))
+        except Exception:
+            log.warning("Failed to save prefs")
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -181,6 +201,9 @@ class PyBridge(QObject):
         self._loaded_path: Path | None = None
         self._exif: object | None = None  # ExifData when an image is loaded
         self._settings: GradeSettings = GradeSettings()
+        self._photo_settings: dict[str, GradeSettings] = {}  # per-path adjustment memory
+        _prefs = self._load_prefs()
+        self._last_dir: str = _prefs.get("last_dir", str(Path.home()))
         self._border: BorderSettings = BorderSettings()
         self._border_enabled: bool = False
         self._render_timer = QTimer(self)
@@ -192,6 +215,14 @@ class PyBridge(QObject):
         self._batch_thread = None  # threading.Thread instance during a batch
 
     # ── Image loading ─────────────────────────────────────────────────────────
+    def _main_window(self):
+        """Return the top-level QMainWindow so dialogs appear in front of it."""
+        from PyQt6.QtWidgets import QApplication
+        win = self.parent()
+        if win is None:
+            win = QApplication.activeWindow()
+        return win
+
     @pyqtSlot(str, str, int, result=str)
     def pickAndExport(self, default_name: str, fmt: str, quality: int) -> str:
         """Open a save dialog and immediately export the graded image."""
@@ -200,7 +231,7 @@ class PyBridge(QObject):
         ext = ext_map.get(fmt.upper(), "jpg")
         suggested = str(Path.home() / f"{default_name}.{ext}")
         path, _ = QFileDialog.getSaveFileName(
-            None, "輸出相片", suggested,
+            self._main_window(), "匯出相片", suggested,
             f"{fmt} (*.{ext})",
         )
         if not path:
@@ -213,7 +244,7 @@ class PyBridge(QObject):
         """Open native file dialog; returns chosen path or empty string."""
         from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
-            None,
+            self._main_window(),
             "選擇相片",
             str(Path.home()),
             DIALOG_FILTERS,
@@ -222,6 +253,60 @@ class PyBridge(QObject):
             return ""
         result = self.loadImage(path)
         return path if result == "ok" else ""
+
+    @pyqtSlot()
+    def pickImages(self) -> None:
+        """Schedule multi-select dialog on next event loop tick via imagesSelected signal.
+
+        QFileDialog must not be called synchronously inside a QWebChannel slot —
+        the WebEngine holds the event loop, causing the dialog to be invisible.
+        QTimer.singleShot(0) defers until WebEngine has released control.
+        """
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._do_pick_images)
+
+    def _do_pick_images(self) -> None:
+        try:
+            from PyQt6.QtWidgets import QFileDialog, QApplication
+            win = self._main_window()
+            if win:
+                win.activateWindow()
+                win.raise_()
+            QApplication.processEvents()
+            paths, _ = QFileDialog.getOpenFileNames(
+                win, "選擇相片", self._last_dir, DIALOG_FILTERS,
+            )
+            if paths:
+                self._last_dir = str(Path(paths[0]).parent)
+                self._save_prefs({"last_dir": self._last_dir})
+            self.imagesSelected.emit(json.dumps(paths) if paths else "[]")
+        except Exception:
+            log.exception("_do_pick_images failed")
+            self.imagesSelected.emit("[]")
+
+    @pyqtSlot(str)
+    def requestThumbnail(self, path: str) -> None:
+        """Async generate 72px thumbnail and emit thumbnailReady(path, dataUrl)."""
+        import threading
+
+        def _work() -> None:
+            try:
+                p = Path(path).expanduser().resolve()
+                if raw_reader.is_raw(p):
+                    img = raw_reader.decode_preview(p).convert("RGB")
+                else:
+                    img = Image.open(p).convert("RGB")
+                # Fixed height 56px, preserve aspect ratio (LR-style natural-width thumbs)
+                ratio = 56 / img.height
+                img = img.resize((max(1, round(img.width * ratio)), 56))
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=70)
+                data_url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+                self.thumbnailReady.emit(path, data_url)
+            except Exception:
+                log.exception("requestThumbnail failed: %s", path)
+
+        threading.Thread(target=_work, daemon=True).start()
 
     @pyqtSlot(str, result=str)
     def loadImage(self, path: str) -> str:
@@ -235,6 +320,10 @@ class PyBridge(QObject):
             p = Path(path).expanduser().resolve()
             if not p.is_file():
                 return f"error: file not found: {p}"
+
+            # Save current photo's settings before switching (LR-style per-photo memory)
+            if self._loaded_path is not None:
+                self._photo_settings[str(self._loaded_path)] = self._settings
 
             if raw_reader.is_raw(p):
                 self.statusChanged.emit(f"解碼 RAW: {p.name} …")
@@ -251,6 +340,8 @@ class PyBridge(QObject):
                 self.statusChanged.emit(f"已載入 {p.name} ({img.width}×{img.height})")
 
             self._loaded_path = p
+            # Restore this photo's saved settings (or fresh defaults if first visit)
+            self._settings = self._photo_settings.get(str(p), GradeSettings())
             self._read_and_emit_exif(p)
             self._schedule_render()
             return "ok"
@@ -293,6 +384,45 @@ class PyBridge(QObject):
         if isinstance(current, str):
             return str(value)
         return value
+
+    @pyqtSlot(result=str)
+    def getGradeParams(self) -> str:
+        """Return current photo's slider-mappable settings as JSON for UI sync."""
+        import json
+        s = self._settings
+        return json.dumps({
+            "wb_temperature": s.wb_temperature,
+            "wb_tint": s.wb_tint,
+            "exposure": s.exposure,
+            "contrast": s.contrast,
+            "highlights": s.highlights,
+            "shadows": s.shadows,
+            "whites": s.whites,
+            "blacks": s.blacks,
+            "texture": s.texture,
+            "clarity": s.clarity,
+            "dehaze": s.dehaze,
+            "vibrance": s.vibrance,
+            "saturation": s.saturation,
+            "vignette_amount": s.vignette_amount,
+            "vignette_midpoint": s.vignette_midpoint,
+            "grain_amount": s.grain_amount,
+            "grain_size": s.grain_size,
+            "grain_roughness": s.grain_roughness,
+            "split_highlights_hue": s.split_highlights_hue,
+            "split_highlights_sat": s.split_highlights_sat,
+            "split_shadows_hue": s.split_shadows_hue,
+            "split_shadows_sat": s.split_shadows_sat,
+            "split_balance": s.split_balance,
+            "sharpening": s.sharpening,
+            "noise_reduction": s.noise_reduction,
+            "noise_color": s.noise_color,
+            "noise_lum_detail": s.noise_lum_detail,
+            "noise_color_detail": s.noise_color_detail,
+            "detail_mask": s.detail_mask,
+            "lut_opacity": s.lut_opacity,
+            "rotation": s.rotation,
+        })
 
     @pyqtSlot()
     def resetGrade(self) -> None:
@@ -553,15 +683,11 @@ class PyBridge(QObject):
             return f"error: {exc}"
 
     # ── Batch Export ──────────────────────────────────────────────────────────
-    @pyqtSlot(result=str)
-    def pickFiles(self) -> str:
-        """Open multi-file picker. Returns JSON list of paths."""
-        from PyQt6.QtWidgets import QFileDialog
-        paths, _ = QFileDialog.getOpenFileNames(
-            None, "選擇多張相片", str(Path.home()),
-            DIALOG_FILTERS,
-        )
-        return json.dumps(paths)
+    @pyqtSlot()
+    def pickFiles(self) -> None:
+        """Async multi-file picker — emits imagesSelected signal (same as pickImages)."""
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._do_pick_images)
 
     # ── Crop ──────────────────────────────────────────────────────────────────
     @pyqtSlot(float, float, float, float)
@@ -587,14 +713,30 @@ class PyBridge(QObject):
         self.statusChanged.emit("已清除裁切")
         self._schedule_render()
 
-    @pyqtSlot(result=str)
-    def pickOutputDir(self) -> str:
-        """Open a folder picker; returns the chosen directory path or ''."""
-        from PyQt6.QtWidgets import QFileDialog
-        d = QFileDialog.getExistingDirectory(
-            None, "選擇批次輸出資料夾", str(Path.home()),
-        )
-        return d or ""
+    @pyqtSlot()
+    def pickOutputDir(self) -> None:
+        """Async folder picker — emits dirSelected signal."""
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._do_pick_output_dir)
+
+    def _do_pick_output_dir(self) -> None:
+        try:
+            from PyQt6.QtWidgets import QFileDialog, QApplication
+            win = self._main_window()
+            if win:
+                win.activateWindow()
+                win.raise_()
+            QApplication.processEvents()
+            d = QFileDialog.getExistingDirectory(
+                win, "選擇批次輸出資料夾", self._last_dir,
+            )
+            if d:
+                self._last_dir = d
+                self._save_prefs({"last_dir": self._last_dir})
+            self.dirSelected.emit(d or "")
+        except Exception:
+            log.exception("_do_pick_output_dir failed")
+            self.dirSelected.emit("")
 
     # ── Batch export (LR-grade, async, with progress) ─────────────────────────
     # Field groups exposed to the UI for selective sync. Keys = group ids used
@@ -752,8 +894,8 @@ class PyBridge(QObject):
             log.exception("openInFileManager failed")
 
     # ── IG Publish ────────────────────────────────────────────────────────────
-    @pyqtSlot(str, result=str)
-    def publishToIg(self, caption: str) -> str:
+    @pyqtSlot(str, str, result=str)
+    def publishToIg(self, caption: str, alt_text: str = "") -> str:
         """Export current preview to JPEG then publish via IGPublisher (uses .env credentials)."""
         try:
             from src.core.ig_publisher import IGPublisher
@@ -766,7 +908,8 @@ class PyBridge(QObject):
             graded.save(tmp, format="JPEG", quality=92, optimize=True)
             self.statusChanged.emit("發佈到 Instagram …")
             pub = IGPublisher()
-            res = pub.publish(image_path=tmp, caption=caption or "")
+            res = pub.publish(image_path=str(tmp), caption=caption or "",
+                              alt_text=alt_text or "")
             self.statusChanged.emit(f"IG 發佈：{'成功' if getattr(res,'success',False) else '失敗'}")
             return json.dumps({"success": getattr(res, "success", False),
                                "message": getattr(res, "message", "") or ""})
