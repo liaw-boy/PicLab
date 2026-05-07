@@ -914,6 +914,80 @@ class PyBridge(QObject):
             log.exception("openInFileManager failed")
 
     # ── IG Publish ────────────────────────────────────────────────────────────
+    @pyqtSlot(result=str)
+    def getIgStatus(self) -> str:
+        """Return IG credentials status and masked token preview."""
+        try:
+            from src.core.ig_publisher import IGPublisher
+            pub = IGPublisher()
+            token = pub.page_token
+            masked = (token[:6] + "…" + token[-4:]) if len(token) > 10 else ("已設定" if token else "")
+            return json.dumps({
+                "configured": pub.is_configured(),
+                "ig_user_id": pub.ig_user_id,
+                "token_masked": masked,
+                "upload_url": pub.upload_url,
+            })
+        except Exception as exc:
+            return json.dumps({"configured": False, "error": str(exc)})
+
+    @pyqtSlot(str, str, str, result=str)
+    def saveIgConfig(self, ig_user_id: str, page_token: str, upload_url: str) -> str:
+        """Write IG credentials to .env file and return new status."""
+        try:
+            env_path = Path(__file__).parents[1] / ".env"
+            lines: list[str] = []
+            if env_path.exists():
+                lines = env_path.read_text().splitlines()
+            keys_to_set = {
+                "IG_USER_ID": ig_user_id.strip(),
+                "FB_PAGE_TOKEN": page_token.strip(),
+                "UPLOAD_SERVER_URL": upload_url.strip().rstrip("/"),
+            }
+            updated: set[str] = set()
+            new_lines: list[str] = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    new_lines.append(line)
+                    continue
+                if "=" in stripped:
+                    k = stripped.split("=", 1)[0].strip()
+                    if k in keys_to_set:
+                        new_lines.append(f"{k}={keys_to_set[k]}")
+                        updated.add(k)
+                        continue
+                new_lines.append(line)
+            for k, v in keys_to_set.items():
+                if k not in updated:
+                    new_lines.append(f"{k}={v}")
+            env_path.write_text("\n".join(new_lines) + "\n")
+            return json.dumps({"success": True})
+        except Exception as exc:
+            log.exception("saveIgConfig failed")
+            return json.dumps({"success": False, "error": str(exc)})
+
+    @pyqtSlot(result=str)
+    def testIgConnection(self) -> str:
+        """Ping IG Graph API with current credentials to verify they work."""
+        try:
+            from src.core.ig_publisher import IGPublisher
+            import requests as _req
+            pub = IGPublisher()
+            if not pub.is_configured():
+                return json.dumps({"ok": False, "error": "尚未設定憑證"})
+            resp = _req.get(
+                f"{pub.API_BASE}/{pub.ig_user_id}",
+                params={"fields": "id,username", "access_token": pub.page_token},
+                timeout=10,
+            )
+            data = resp.json()
+            if "error" in data:
+                return json.dumps({"ok": False, "error": data["error"].get("message", "API 錯誤")})
+            return json.dumps({"ok": True, "username": data.get("username", "")})
+        except Exception as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+
     @pyqtSlot(str, str, result=str)
     def publishToIg(self, caption: str, alt_text: str = "") -> str:
         """Export current preview to JPEG then publish via IGPublisher (uses .env credentials)."""

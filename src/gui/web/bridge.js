@@ -290,16 +290,23 @@
         try { updateSlidersFromParams(JSON.parse(json)); } catch (_e) {}
       });
     });
-    // ── Export split-button ──────────────────────────────────────────────────
+    // ── Export dropdown (fixed-position, escapes all stacking contexts) ─────
     const exportMenu = document.getElementById("export-menu");
-    const exportDropBtn = document.getElementById("btn-export-dropdown");
-    // Toggle dropdown
-    exportDropBtn?.addEventListener("click", (e) => {
+    const exportToggle = document.getElementById("btn-export-toggle");
+
+    const closeExportMenu = () => { if (exportMenu) exportMenu.style.display = "none"; };
+
+    exportToggle?.addEventListener("click", (e) => {
       e.stopPropagation();
-      exportMenu?.classList.toggle("hidden");
+      if (!exportMenu) return;
+      if (exportMenu.style.display === "flex") { closeExportMenu(); return; }
+      // Position below the toggle button using fixed coordinates
+      const rect = exportToggle.getBoundingClientRect();
+      exportMenu.style.top = (rect.bottom + 8) + "px";
+      exportMenu.style.right = (window.innerWidth - rect.right) + "px";
+      exportMenu.style.display = "flex";
     });
-    // Close on outside click
-    document.addEventListener("click", () => exportMenu?.classList.add("hidden"));
+    document.addEventListener("click", closeExportMenu);
 
     const doSingleExport = () => {
       if (!bridge) return;
@@ -319,13 +326,12 @@
       });
     };
 
-    document.getElementById("btn-export")?.addEventListener("click", doSingleExport);
     document.getElementById("export-single")?.addEventListener("click", () => {
-      exportMenu?.classList.add("hidden");
+      closeExportMenu();
       doSingleExport();
     });
     document.getElementById("export-batch")?.addEventListener("click", () => {
-      exportMenu?.classList.add("hidden");
+      closeExportMenu();
       const modal = document.getElementById("batch-modal");
       if (modal) { modal.classList.remove("hidden"); modal.style.display = "flex"; }
     });
@@ -794,6 +800,7 @@
     wireBatchWizard();
 
     wireIGModal();
+    wireAccIGPanel();
   };
 
   /** Snapshot of EXIF cached from the most recent exifReady event. */
@@ -806,16 +813,107 @@
   const wireIGModal = () => {
     const pub = document.getElementById("btn-publish");
     const modal = document.getElementById("ig-modal");
+    const setupPanel = document.getElementById("ig-setup-panel");
+    const accountBadge = document.getElementById("ig-account-badge");
+    const accountName = document.getElementById("ig-account-name");
+    const settingsToggle = document.getElementById("ig-settings-toggle");
+
+    // ── 設定面板 helpers ─────────────────────────────────────────────────────
+    const showSetup = (show) => {
+      if (!setupPanel) return;
+      setupPanel.classList.toggle("hidden", !show);
+      if (settingsToggle) {
+        settingsToggle.querySelector("span").textContent = show ? "check" : "settings";
+      }
+    };
+
+    const refreshStatus = () => {
+      if (!bridge) return;
+      bridge.getIgStatus((raw) => {
+        try {
+          const st = JSON.parse(raw);
+          if (st.configured) {
+            showSetup(false);
+            if (accountBadge) { accountBadge.classList.remove("hidden"); accountBadge.style.display = "flex"; }
+            if (accountName) accountName.textContent = st.ig_user_id;
+            // pre-fill fields with masked values
+            const uid = document.getElementById("ig-cfg-user-id");
+            const tok = document.getElementById("ig-cfg-token");
+            const url = document.getElementById("ig-cfg-upload-url");
+            if (uid && !uid.value) uid.value = st.ig_user_id;
+            if (tok && !tok.value) tok.placeholder = st.token_masked || "已設定";
+            if (url && !url.value) url.value = st.upload_url;
+          } else {
+            showSetup(true);
+            if (accountBadge) { accountBadge.classList.add("hidden"); accountBadge.style.display = ""; }
+          }
+        } catch (_) { showSetup(true); }
+      });
+    };
+
+    if (settingsToggle) settingsToggle.addEventListener("click", () => {
+      const hidden = setupPanel?.classList.contains("hidden");
+      showSetup(hidden);
+    });
+
+    // 顯示/隱藏 token
+    document.getElementById("ig-token-eye")?.addEventListener("click", () => {
+      const tok = document.getElementById("ig-cfg-token");
+      if (!tok) return;
+      const isPass = tok.type === "password";
+      tok.type = isPass ? "text" : "password";
+      const icon = document.getElementById("ig-token-eye")?.querySelector("span");
+      if (icon) icon.textContent = isPass ? "visibility_off" : "visibility";
+    });
+
+    // 儲存設定
+    document.getElementById("ig-cfg-save")?.addEventListener("click", () => {
+      const uid = document.getElementById("ig-cfg-user-id")?.value.trim() || "";
+      const tok = document.getElementById("ig-cfg-token")?.value.trim() || "";
+      const url = document.getElementById("ig-cfg-upload-url")?.value.trim() || "";
+      if (!uid || !tok || !url) {
+        const r = document.getElementById("ig-cfg-test-result");
+        if (r) { r.textContent = "請填入所有欄位"; r.style.color = "#b91c1c"; }
+        return;
+      }
+      bridge.saveIgConfig(uid, tok, url, (raw) => {
+        const res = JSON.parse(raw || "{}");
+        const r = document.getElementById("ig-cfg-test-result");
+        if (res.success) {
+          if (r) { r.textContent = "已儲存"; r.style.color = "#16a34a"; }
+          setTimeout(() => { if (r) r.textContent = ""; refreshStatus(); }, 1500);
+        } else {
+          if (r) { r.textContent = res.error || "儲存失敗"; r.style.color = "#b91c1c"; }
+        }
+      });
+    });
+
+    // 測試連線
+    document.getElementById("ig-cfg-test")?.addEventListener("click", () => {
+      const r = document.getElementById("ig-cfg-test-result");
+      if (r) { r.textContent = "測試中…"; r.style.color = ""; }
+      bridge.testIgConnection((raw) => {
+        const res = JSON.parse(raw || "{}");
+        if (r) {
+          r.textContent = res.ok ? `✓ @${res.username}` : `✗ ${res.error}`;
+          r.style.color = res.ok ? "#16a34a" : "#b91c1c";
+        }
+      });
+    });
+
     const open = () => {
       if (!modal) return;
       modal.classList.remove("hidden");
       modal.style.display = "flex";
+      document.body.style.overflow = "auto";
+      refreshStatus();
       updatePreview();
     };
     const close = () => {
       if (!modal) return;
       modal.classList.add("hidden");
       modal.style.display = "";
+      document.body.style.overflow = "hidden";
     };
     if (pub) pub.addEventListener("click", open);
     document.getElementById("ig-close")?.addEventListener("click", close);

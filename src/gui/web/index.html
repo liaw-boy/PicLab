@@ -22,6 +22,7 @@
     font-weight: normal; font-style: normal; line-height: 1;
     text-transform: none; display: inline-block; white-space: nowrap;
     direction: ltr; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
+    vertical-align: middle;
   }
 
   /* Accordion */
@@ -65,8 +66,8 @@
 <div id="app-grid" class="w-screen h-screen grid grid-rows-[44px_1fr] overflow-hidden">
 
   <!-- ── Top bar (44px, LR-thin) ────────────────────────────────────────────── -->
-  <header class="row-start-1 flex items-center justify-between px-5 border-b border-line bg-bg/95 backdrop-blur-sm">
-    <div class="flex items-baseline gap-3">
+  <header class="row-start-1 flex items-center justify-between px-5 border-b border-line bg-bg/95 backdrop-blur-sm" style="position:relative;z-index:100;overflow:visible">
+    <div class="flex items-center gap-3">
       <span class="font-sans font-bold text-base tracking-tight text-ink">PicLab</span>
       <span class="font-sans font-medium text-xs uppercase tracking-widest text-muted">Atelier</span>
       <span class="text-[11px] tracking-widest uppercase text-muted ml-4" id="filename-display">untitled</span>
@@ -79,28 +80,27 @@
         <span class="material-symbols-outlined text-[16px]">restart_alt</span>重設
       </button>
       <span class="w-px h-5 bg-line mx-1" aria-hidden="true"></span>
-      <button id="btn-publish" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors" title="發佈至 Instagram">
+      <!-- Export trigger -->
+      <button id="btn-export-toggle" class="px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md bg-accent text-bg hover:bg-ink transition-colors">
+        <span class="material-symbols-outlined text-[16px]">arrow_outward</span>匯出
+        <span class="material-symbols-outlined text-[14px]">expand_more</span>
+      </button>
+      <button id="btn-publish" class="ml-1 px-3 py-1.5 text-xs flex items-center gap-1.5 rounded-md hover:bg-ink hover:text-bg transition-colors" title="發佈至 Instagram">
         <span class="material-symbols-outlined text-[16px]">share</span>發佈
       </button>
-      <!-- Export split-button: left = single export, right = dropdown -->
-      <div class="relative ml-1 flex" id="export-btn-group">
-        <button id="btn-export" class="px-4 py-1.5 text-xs flex items-center gap-1.5 rounded-l-md bg-accent text-bg hover:bg-ink transition-colors">
-          <span class="material-symbols-outlined text-[16px]">arrow_outward</span>匯出
-        </button>
-        <button id="btn-export-dropdown" class="px-1.5 py-1.5 text-xs flex items-center rounded-r-md bg-accent text-bg hover:bg-ink transition-colors border-l border-white/20">
-          <span class="material-symbols-outlined text-[14px]">expand_more</span>
-        </button>
-        <div id="export-menu" class="hidden absolute right-0 top-full mt-1 bg-surface border border-line rounded-lg shadow-lg z-40 overflow-hidden" style="white-space:nowrap;min-width:max-content">
-          <button id="export-single" class="w-full px-4 py-2.5 text-xs text-left flex items-center gap-2 hover:bg-ink hover:text-bg transition-colors">
-            <span class="material-symbols-outlined text-[14px]">image</span>單張匯出
-          </button>
-          <button id="export-batch" class="w-full px-4 py-2.5 text-xs text-left flex items-center gap-2 hover:bg-ink hover:text-bg transition-colors">
-            <span class="material-symbols-outlined text-[14px]">stacks</span>批次匯出
-          </button>
-        </div>
-      </div>
     </div>
   </header>
+  <!-- Export menu: fixed at body level, positioned by JS, escapes all stacking contexts -->
+  <div id="export-menu" style="display:none;position:fixed;z-index:9999;min-width:200px;background:#F4EFE6;border:1px solid #D9D0BE;border-radius:12px;box-shadow:0 8px 32px rgba(31,26,20,0.18);padding:6px;flex-direction:column;gap:4px">
+    <button id="export-single" style="width:100%;padding:10px 12px;display:flex;align-items:center;gap:12px;border-radius:8px;border:none;background:transparent;cursor:pointer;text-align:left" onmouseover="this.style.background='#4A1F38';this.querySelector('.eico').style.color='#F4EFE6';this.querySelector('.etitle').style.color='#F4EFE6';this.querySelector('.esub').style.color='rgba(244,239,230,0.7)'" onmouseout="this.style.background='transparent';this.querySelector('.eico').style.color='#4A1F38';this.querySelector('.etitle').style.color='#1F1A14';this.querySelector('.esub').style.color='#7A7166'">
+      <span class="material-symbols-outlined eico" style="font-size:20px;color:#4A1F38;flex-shrink:0">image</span>
+      <span><div class="etitle" style="font-size:12px;font-weight:600;line-height:1.2;color:#1F1A14">單張匯出</div><div class="esub" style="font-size:10px;color:#7A7166;margin-top:2px">儲存目前這張照片</div></span>
+    </button>
+    <button id="export-batch" style="width:100%;padding:10px 12px;display:flex;align-items:center;gap:12px;border-radius:8px;border:none;background:transparent;cursor:pointer;text-align:left" onmouseover="this.style.background='#4A1F38';this.querySelector('.eico').style.color='#F4EFE6';this.querySelector('.etitle').style.color='#F4EFE6';this.querySelector('.esub').style.color='rgba(244,239,230,0.7)'" onmouseout="this.style.background='transparent';this.querySelector('.eico').style.color='#4A1F38';this.querySelector('.etitle').style.color='#1F1A14';this.querySelector('.esub').style.color='#7A7166'">
+      <span class="material-symbols-outlined eico" style="font-size:20px;color:#4A1F38;flex-shrink:0">stacks</span>
+      <span><div class="etitle" style="font-size:12px;font-weight:600;line-height:1.2;color:#1F1A14">批次匯出</div><div class="esub" style="font-size:10px;color:#7A7166;margin-top:2px">一次處理多張照片</div></span>
+    </button>
+  </div>
 
   <!-- ── LR-style progress strip (slides down when busy) ──────────────────── -->
   <div id="progress-strip">
@@ -220,12 +220,12 @@
           <canvas id="histogram-canvas" class="w-full h-full block" width="400" height="160"></canvas>
 
           <!-- Clipping indicators (only visible when actually clipping) -->
-          <button id="hist-clip-shadow" class="absolute top-1 left-1 w-2.5 h-2.5 rounded-sm transition-opacity opacity-0" title="陰影裁切"></button>
-          <button id="hist-clip-high" class="absolute top-1 right-1 w-2.5 h-2.5 rounded-sm transition-opacity opacity-0" title="亮部裁切"></button>
+          <button id="hist-clip-shadow" class="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wider transition-opacity opacity-0 text-white" title="陰影裁切">▲ 暗</button>
+          <button id="hist-clip-high" class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wider transition-opacity opacity-0 text-white" title="亮部裁切">亮 ▲</button>
 
           <!-- Hover crosshair + readout (hidden until hover) -->
           <div id="hist-cursor" class="absolute top-0 bottom-0 w-px bg-ink/30 pointer-events-none hidden" style="left:0"></div>
-          <div id="hist-zone-label" class="absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-ink text-bg text-[10px] tracking-wider rounded pointer-events-none hidden"></div>
+          <div id="hist-zone-label" class="absolute top-1 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-ink text-bg text-[10px] tracking-wider rounded pointer-events-none hidden"></div>
         </div>
       </div>
 
@@ -549,6 +549,89 @@
           </div>
         </section>
 
+        <!-- ── 08 發佈 · Publish ───────────────────────────────────────────── -->
+        <section class="acc" data-acc>
+          <header class="acc-head">
+            <div class="flex items-center gap-2"><span class="material-symbols-outlined chev text-[18px]">chevron_right</span><span class="font-sans font-semibold text-sm tracking-tight">發佈 <span class="text-muted text-xs font-normal">· Publish to IG</span></span></div>
+            <span class="text-[10px] tracking-widest uppercase text-muted">08</span>
+          </header>
+          <div class="acc-body space-y-3">
+
+            <!-- 帳號狀態 -->
+            <div id="acc-ig-status" class="flex items-center gap-2 text-[11px]">
+              <span class="material-symbols-outlined text-[14px]" id="acc-ig-status-icon">radio_button_unchecked</span>
+              <span id="acc-ig-status-text" class="text-muted">未設定帳號</span>
+              <button id="acc-ig-toggle-cfg" class="ml-auto text-[10px] px-2 py-0.5 rounded border border-line hover:bg-ink hover:text-bg">設定</button>
+            </div>
+
+            <!-- 憑證設定（預設折疊） -->
+            <div id="acc-ig-cfg" class="hidden space-y-2 pb-2 border-b border-line">
+              <div>
+                <label class="text-[10px] tracking-wider text-muted block mb-1">IG Business User ID</label>
+                <input id="acc-ig-user-id" type="text" class="w-full px-2 py-1.5 text-xs border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent font-mono" placeholder="17841400000000000"/>
+              </div>
+              <div>
+                <label class="text-[10px] tracking-wider text-muted block mb-1">Page Access Token</label>
+                <div class="relative">
+                  <input id="acc-ig-token" type="password" class="w-full px-2 py-1.5 pr-8 text-xs border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent font-mono" placeholder="EAAxxxxxxx…"/>
+                  <button id="acc-ig-token-eye" class="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink" tabindex="-1">
+                    <span class="material-symbols-outlined text-[14px]">visibility</span>
+                  </button>
+                </div>
+                <a class="text-[10px] text-accent underline mt-1 block" href="https://developers.facebook.com/tools/explorer/" target="_blank">
+                  → 去 Graph API Explorer 取得 Token
+                </a>
+                <p class="text-[10px] text-muted mt-0.5 leading-relaxed">步驟：選 App → 勾選 <code class="bg-line px-0.5 rounded">instagram_basic</code> + <code class="bg-line px-0.5 rounded">pages_read_engagement</code> + <code class="bg-line px-0.5 rounded">instagram_content_publish</code> → 產生 Token</p>
+              </div>
+              <div>
+                <label class="text-[10px] tracking-wider text-muted block mb-1">Upload Server URL</label>
+                <input id="acc-ig-upload-url" type="text" class="w-full px-2 py-1.5 text-xs border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent font-mono" placeholder="https://xxx.ts.net"/>
+                <p class="text-[10px] text-muted mt-0.5">用 <code class="bg-line px-0.5 rounded">tailscale funnel 8765</code> 產生公開 URL</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="acc-ig-test" class="px-2 py-1 text-[10px] rounded border border-line hover:bg-ink hover:text-bg flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">wifi_tethering</span>測試
+                </button>
+                <button id="acc-ig-save" class="px-2 py-1 text-[10px] rounded bg-accent text-bg hover:opacity-90 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">save</span>儲存
+                </button>
+                <span id="acc-ig-cfg-result" class="text-[10px] font-mono"></span>
+              </div>
+            </div>
+
+            <!-- Caption -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[10px] tracking-wider text-muted">內文 · Caption</label>
+                <span id="acc-ig-cap-count" class="text-[10px] font-mono text-muted tnum">0/2200</span>
+              </div>
+              <textarea id="acc-ig-caption" maxlength="2200" rows="4" class="w-full p-2 text-xs border border-line rounded bg-bg text-ink resize-none focus:outline-none focus:border-accent" placeholder="寫個有故事的 caption…"></textarea>
+            </div>
+
+            <!-- Hashtags -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-[10px] tracking-wider text-muted">標籤 · Hashtags</label>
+                <span id="acc-ig-hash-count" class="text-[10px] font-mono text-muted tnum">0/30</span>
+              </div>
+              <textarea id="acc-ig-hashtags" rows="2" class="w-full p-2 text-xs border border-line rounded bg-bg text-ink resize-none focus:outline-none focus:border-accent font-mono" placeholder="#portrait #fujifilm #filmlook"></textarea>
+            </div>
+
+            <!-- Location -->
+            <div>
+              <label class="text-[10px] tracking-wider text-muted block mb-1">地點 · Location</label>
+              <input id="acc-ig-location" type="text" class="w-full px-2 py-1.5 text-xs border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent" placeholder="Taipei, Taiwan"/>
+            </div>
+
+            <!-- Publish button -->
+            <button id="acc-ig-publish" class="w-full py-2 text-xs tracking-wider rounded bg-accent text-bg hover:opacity-90 flex items-center justify-center gap-1.5">
+              <span class="material-symbols-outlined text-[14px]">send</span>發佈至 Instagram
+            </button>
+            <div id="acc-ig-publish-result" class="text-[10px] font-mono text-center hidden"></div>
+
+          </div>
+        </section>
+
       </div>
     </aside>
   </div>
@@ -572,7 +655,7 @@
 <div id="batch-modal" class="fixed inset-0 z-50 hidden bg-ink/70 backdrop-blur-sm items-center justify-center">
   <div class="bg-surface rounded-xl shadow-deep border border-line w-[640px] max-h-[92vh] overflow-y-auto p-6 space-y-4">
     <div class="flex items-center justify-between">
-      <div class="flex items-baseline gap-2">
+      <div class="flex items-center gap-2">
         <span class="material-symbols-outlined text-accent text-[22px]">stacks</span>
         <h3 class="font-sans font-semibold text-lg tracking-tight">批次處理 · Batch Export</h3>
       </div>
@@ -674,14 +757,60 @@
 </div>
 
 <!-- IG Publish modal — customizable post composer -->
-<div id="ig-modal" class="fixed inset-0 z-50 hidden bg-ink/70 backdrop-blur-sm items-center justify-center">
-  <div class="bg-surface rounded-xl shadow-deep border border-line w-[560px] max-h-[90vh] overflow-y-auto p-6 space-y-4">
+<div id="ig-modal" class="fixed inset-0 z-50 hidden bg-ink/70 backdrop-blur-sm items-center justify-center" style="display:none!important">
+  <div class="bg-surface rounded-xl shadow-deep border border-line w-[560px] p-6 space-y-4" style="max-height:88vh;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">
     <div class="flex items-center justify-between">
-      <div class="flex items-baseline gap-2">
+      <div class="flex items-center gap-2">
         <span class="material-symbols-outlined text-accent text-[22px]">share</span>
-        <h3 class="font-sans font-semibold text-lg tracking-tight">發佈至 Instagram</h3>
+        <h3 class="font-sans font-semibold text-lg tracking-tight" id="ig-modal-title">發佈至 Instagram</h3>
       </div>
-      <button id="ig-close" class="text-muted hover:text-ink"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      <div class="flex items-center gap-2">
+        <button id="ig-settings-toggle" title="帳號設定" class="text-muted hover:text-ink"><span class="material-symbols-outlined text-[18px]">settings</span></button>
+        <button id="ig-close" class="text-muted hover:text-ink"><span class="material-symbols-outlined text-[18px]">close</span></button>
+      </div>
+    </div>
+
+    <!-- ── 設定面板（未設定時自動展開） ──────────────────────────────────── -->
+    <div id="ig-setup-panel" class="hidden space-y-3 pb-2 border-b border-line">
+      <div class="flex items-center gap-1.5 text-[11px] tracking-wider text-muted mb-2">
+        <span class="material-symbols-outlined text-[14px]">key</span>帳號憑證 · Credentials
+      </div>
+      <div>
+        <label class="text-[10px] tracking-wider text-muted block mb-1">IG Business User ID</label>
+        <input id="ig-cfg-user-id" type="text" class="w-full px-3 py-2 text-sm border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent font-mono" placeholder="17841400000000000"/>
+      </div>
+      <div>
+        <label class="text-[10px] tracking-wider text-muted block mb-1">Page Access Token</label>
+        <div class="relative">
+          <input id="ig-cfg-token" type="password" class="w-full px-3 py-2 pr-9 text-sm border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent font-mono" placeholder="EAAxxxxxxx…"/>
+          <button id="ig-token-eye" class="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-ink" tabindex="-1">
+            <span class="material-symbols-outlined text-[16px]">visibility</span>
+          </button>
+        </div>
+        <div class="text-[10px] text-muted mt-1">從 Meta Business Suite → 設定 → 進階 → 頁面存取權杖取得</div>
+      </div>
+      <div>
+        <label class="text-[10px] tracking-wider text-muted block mb-1">Upload Relay Server URL <span class="opacity-60">（用於中繼圖片給 IG API）</span></label>
+        <input id="ig-cfg-upload-url" type="text" class="w-full px-3 py-2 text-sm border border-line rounded bg-bg text-ink focus:outline-none focus:border-accent font-mono" placeholder="https://xxx.ts.net"/>
+        <div class="text-[10px] text-muted mt-1">Tailscale Funnel / 任何可公開存取的 HTTPS 端點</div>
+      </div>
+      <div class="flex items-center gap-2 pt-1">
+        <button id="ig-cfg-test" class="px-3 py-1.5 text-xs rounded border border-line hover:bg-ink hover:text-bg flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[13px]">wifi_tethering</span>測試連線
+        </button>
+        <span id="ig-cfg-test-result" class="text-[11px] font-mono"></span>
+        <div class="flex-1"></div>
+        <button id="ig-cfg-save" class="px-4 py-1.5 text-xs rounded bg-accent text-bg hover:opacity-90 flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[13px]">save</span>儲存
+        </button>
+      </div>
+    </div>
+
+    <!-- ── 已設定狀態小標籤 ──────────────────────────────────────────────── -->
+    <div id="ig-account-badge" class="hidden items-center gap-2 text-[11px] text-muted">
+      <span class="material-symbols-outlined text-[14px] text-green-600">check_circle</span>
+      <span id="ig-account-name" class="font-mono text-ink"></span>
+      <span class="opacity-50">· 已連線</span>
     </div>
 
     <!-- Caption -->
