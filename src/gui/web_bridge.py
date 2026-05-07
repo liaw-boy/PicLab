@@ -433,15 +433,22 @@ class PyBridge(QObject):
     @pyqtSlot(str)
     def applyLut(self, filename: str) -> None:
         """Apply a built-in film simulation LUT by filename, '' to clear."""
-        from src.models.grade_settings import LUT_ASSETS_DIR
-        if not filename:
-            self._settings = dataclasses.replace(self._settings, lut_path=None)
-            self.statusChanged.emit("LUT 已清除")
-        else:
-            full = LUT_ASSETS_DIR / filename
-            self._settings = dataclasses.replace(self._settings, lut_path=str(full))
-            self.statusChanged.emit(f"套用 LUT: {filename}")
-        self._schedule_render()
+        try:
+            from src.models.grade_settings import LUT_ASSETS_DIR
+            if not filename:
+                self._settings = dataclasses.replace(self._settings, lut_path=None)
+                self.statusChanged.emit("LUT 已清除")
+            else:
+                full = LUT_ASSETS_DIR / filename
+                if not full.exists():
+                    self.statusChanged.emit(f"找不到 LUT 檔案: {filename}")
+                    return
+                self._settings = dataclasses.replace(self._settings, lut_path=str(full))
+                self.statusChanged.emit(f"套用 LUT: {filename}")
+            self._schedule_render()
+        except Exception as exc:
+            log.exception("applyLut failed for %r", filename)
+            self.statusChanged.emit(f"LUT 套用失敗: {exc}")
 
     @pyqtSlot(str, int, "QVariant")
     def setHslComponent(self, channel: str, idx: int, value: Any) -> None:
@@ -943,7 +950,17 @@ class PyBridge(QObject):
             # Histogram off the graded image (post-pipeline reflects what the user sees)
             self._emit_histogram(graded)
         except Exception as exc:
+            import traceback
+            tb = traceback.format_exc()
             log.exception("render_preview failed")
+            # Write full traceback to log file for diagnosis
+            try:
+                _log_dir = Path.home() / ".config" / "piclab"
+                _log_dir.mkdir(parents=True, exist_ok=True)
+                with open(_log_dir / "render_error.log", "a") as _f:
+                    _f.write(f"\n--- render_preview error ---\n{tb}\n")
+            except Exception:
+                pass
             self.statusChanged.emit(f"渲染失敗: {exc}")
 
     def _emit_histogram(self, img: Image.Image) -> None:
